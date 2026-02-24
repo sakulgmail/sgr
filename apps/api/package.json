@@ -1,0 +1,33 @@
+{
+  "name": "gsr-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "seed": "node prisma/seed.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.2.1",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "express-session": "^1.18.1",
+    "helmet": "^8.0.0",
+    "nodemailer": "^6.10.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "prisma": "^6.2.1",
+    "supertest": "^7.1.3",
+    "vitest": "^2.1.8"
+  }
+}

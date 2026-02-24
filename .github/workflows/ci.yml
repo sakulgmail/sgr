@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gsr
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d gsr"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gsr
+      APP_BASE_URL: http://localhost:5173
+      NODE_ENV: test
+      SESSION_SECRET: ci_session_secret
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Prisma generate
+        run: npm --workspace apps/api run prisma:generate
+
+      - name: Prisma migrate deploy
+        run: npm --workspace apps/api run prisma:deploy
+
+      - name: Run API tests
+        run: npm run test:api
+
+      - name: Build frontend
+        run: npm run build:web

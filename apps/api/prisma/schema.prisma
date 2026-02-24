@@ -1,0 +1,220 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  REQUESTOR
+  SALES_MANAGER
+  STAFF
+  ADMIN
+}
+
+enum StaffType {
+  PRODUCTION_ENGINEER
+  PURCHASING
+  LOGISTICS
+}
+
+enum ProductNodeType {
+  CATEGORY
+  SUBCATEGORY
+  PRODUCT
+}
+
+enum WorkRequestStatus {
+  submitted
+  rejected
+  approved
+  preparing_goods_sampling
+  ready_to_ship
+  shipped
+}
+
+enum TaskState {
+  active
+  acknowledged
+  finished
+}
+
+enum CommentType {
+  requestor_note
+  manager_decision
+  staff_ack
+  staff_finish
+  handoff
+  system
+  status_reset
+}
+
+model User {
+  id           String       @id @default(uuid())
+  email        String       @unique
+  passwordHash String
+  displayName  String
+  phone        String?
+  role         UserRole
+  staffType    StaffType?
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  requests          WorkRequest[]            @relation("RequestorRequests")
+  assignments       WorkRequestAssignment[]
+  tasks             Task[]
+  comments          Comment[]
+  auditLogs         AuditLog[]
+  handoffsFrom      TaskHandoff[]            @relation("HandoffFrom")
+  handoffsTo        TaskHandoff[]            @relation("HandoffTo")
+  assignedByRecords WorkRequestAssignment[]  @relation("AssignedByUser")
+  passwordResetTokens PasswordResetToken[]
+}
+
+model ProductNode {
+  id        String          @id @default(uuid())
+  name      String
+  parentId  String?
+  nodeType  ProductNodeType
+  isActive  Boolean         @default(true)
+  sortOrder Int             @default(0)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  parent       ProductNode?  @relation("ProductTree", fields: [parentId], references: [id])
+  children     ProductNode[] @relation("ProductTree")
+  workRequests WorkRequest[]
+
+  @@index([parentId])
+}
+
+model WorkRequest {
+  id                        String                @id @default(uuid())
+  workRequestNo             String                @unique
+  requestorUserId           String
+  productNodeId             String
+  status                    WorkRequestStatus
+  purpose                   String
+  volumeKg                  Decimal               @db.Decimal(12, 3)
+  unitCount                 Int
+  receivingAddress          String
+  receivingPersonFirstname  String
+  receivingPersonLastname   String
+  receivingPersonEmail      String
+  receivingPersonPhone      String
+  targetReceivingBy         DateTime              @db.Date
+  dhlTrackingUrl            String?
+  extraFields               Json?
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+
+  requestor   User                    @relation("RequestorRequests", fields: [requestorUserId], references: [id])
+  productNode ProductNode             @relation(fields: [productNodeId], references: [id])
+  assignments WorkRequestAssignment[]
+  tasks       Task[]
+  handoffs    TaskHandoff[]
+  comments    Comment[]
+
+  @@index([status, createdAt])
+  @@index([requestorUserId, createdAt])
+}
+
+model WorkRequestAssignment {
+  id           String    @id @default(uuid())
+  workRequestId String
+  userId       String
+  assignedBy   String
+  assignedRole StaffType
+  createdAt    DateTime  @default(now())
+
+  workRequest WorkRequest @relation(fields: [workRequestId], references: [id])
+  user        User        @relation(fields: [userId], references: [id])
+  assignedByUser User     @relation("AssignedByUser", fields: [assignedBy], references: [id])
+
+  @@unique([workRequestId, userId])
+  @@index([workRequestId])
+  @@index([userId])
+}
+
+model Task {
+  id             String    @id @default(uuid())
+  workRequestId  String
+  assigneeUserId String
+  taskRole       StaffType
+  state          TaskState @default(active)
+  acknowledgedAt DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  workRequest WorkRequest @relation(fields: [workRequestId], references: [id])
+  assignee    User        @relation(fields: [assigneeUserId], references: [id])
+
+  @@unique([workRequestId, assigneeUserId])
+  @@index([assigneeUserId, state])
+}
+
+model TaskHandoff {
+  id            String   @id @default(uuid())
+  workRequestId String
+  fromUserId    String
+  toUserId      String
+  note          String?
+  createdAt     DateTime @default(now())
+
+  workRequest WorkRequest @relation(fields: [workRequestId], references: [id])
+  fromUser    User        @relation("HandoffFrom", fields: [fromUserId], references: [id])
+  toUser      User        @relation("HandoffTo", fields: [toUserId], references: [id])
+
+  @@index([workRequestId])
+}
+
+model Comment {
+  id           String      @id @default(uuid())
+  workRequestId String
+  authorUserId String
+  commentType  CommentType
+  body         String
+  createdAt    DateTime    @default(now())
+
+  workRequest WorkRequest @relation(fields: [workRequestId], references: [id])
+  author      User        @relation(fields: [authorUserId], references: [id])
+
+  @@index([workRequestId, createdAt])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String?
+  entityType  String
+  entityId    String
+  action      String
+  before      Json?
+  after       Json?
+  createdAt   DateTime @default(now())
+
+  actor User? @relation(fields: [actorUserId], references: [id])
+
+  @@index([entityType, entityId, createdAt])
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model PasswordResetToken {
+  token     String   @id
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, expiresAt])
+}

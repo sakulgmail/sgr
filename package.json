@@ -1,0 +1,22 @@
+{
+  "name": "sampling-goods-request",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test:api": "npm --workspace apps/api run test",
+    "build:web": "npm --workspace apps/web run build",
+    "ci": "npm run lint && npm run test:api && npm run build:web"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "eslint": "^9.17.0",
+    "eslint-plugin-react": "^7.37.3",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "globals": "^15.14.0"
+  },
+  "workspaces": [
+    "apps/*"
+  ]
+}

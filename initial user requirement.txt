@@ -1,0 +1,69 @@
+i want to create a web app for a manufacturing company client. The web app name is Goods Sampling Request.
+
+Please create me the requirements.md file so i can have Codex to create the app for me.
+
+This Goods sampling request web app has below features
+
+1- Requestors must logon to website with username (email) and password
+2- after logged in, requestors can fill in a request form
+3- this request form allows requestors to request for a Goods sampling
+4- Goods are categorized into 3 sub levels
+	- Product category
+		- Product sub-category1
+			- Product sub-category2
+				- Product
+ - However, some Goods can have only 1 sub levels or 1 sub levels
+ 
+5- When requestors select the "Product" that they want to request, the requestors will input more information such as
+	- Purpose : Explain what requestors want the sampling goods for
+	- Volume : The amount that requestors request in Kilogram
+	- Unit : How many of sampling units they request
+	- Receiving address : physical address for sampling request to send to
+	- Receiving person : name lastname email and phone number
+	- Target receiving by : Date that the requestor would like to have the product by
+	- There can be more fields required in the future
+	
+6- Once the requestor fill in and click submit
+	- The system assign a "Work Request" number for this request
+	- The web app responses with message that your request has been submitted successfully
+	- There will be email sent to the requestor and the manufacturing group email
+	- In the "manufacturing group email", there are multiple staffs in this group email such as sales manager, production engineer, purchasing person, and logistic person
+	- Also, the system will send email to the requestor with requested details, request status 
+	  and url of the website so the requestor can login to check the request status
+	  
+7- Once the Sales manager receives email, log in to the attached web app url, the Sales manager will approve or rejected the "Work Request" with comments
+	- If rejected, system will send email to the requestor for the work request status and rejection comment
+	- If approved, Sales manager will assign (check box) staffs (production engineer, purchasing person, and logistic person)
+	  who need to work on this request
+	- There will be email sent to the assigned staffs, the email contains url link of the app, and cc: the sales manager
+	- There will be also email sent to the requestor to inform the the Work Request has been approved
+	- Each of assigned staff log in to the web app, go to the assigned work request and clicks acknowledged for the approved request 
+		- Each of assigned staff can input comments with the acknowledgement
+		- After each of the staffs acknowledged the request, there will be updated email sent to Sales manager and all assigned staffs (no email to requestor at this stage)
+	- Works can be done in parallel among assigned staffs or can be done in sequence
+		- Once each of the assigned staffs finishs the task, the staff will logon to the app and click "Finised" on the assigned tasks
+		     - there is an option that the staff can select the staff(s) to procedd the next steps
+			      - in case of tasks are done sequentially, the staff would select other staff(s) to proceed the next steps   
+				  - in case of tasks are done parallelly, the staff do not have to select the next staffs
+	- Once all assigned staffs click "Finised" on their assigned tasks, there will updated email sent to Sales manager and assigned staffs (no email to requestor at this stage)
+	(next step is for Logistic staff to make appointment with DHL to pick up the goods, this is internal process and is handled in a separated system)
+	- Once DHL has picked up the goods, the logistic staff will log in to the system and update the "Work Request" with DHL tracking url and click "Shipped" button
+	- Once the "Work Request" status is changed to "Shipped", system will email to the Requestor and cc: sales manager, and cc: all assigned staffs for the updated status
+	  and url so each person can log on to the system to check		
+		
+- Request atttributes
+	- "Work Request" number
+	- Work Request status
+		- submiited : after requestor submiited the request
+		- rejected / approved : after sales manager rejected or approved the request
+		- preparing goods sampling : after all assigned staffs click acknowledged
+		- ready to ship : after all assigned staffs finish their tasks
+		- shipped : after the logistic staff click "shipped"
+		
+- Web App stack
+	- Frontend : Javascript , Typescript and other as needed
+	- Backend : NodeJS
+	- Database : PostgresSQL
+	- Email :  SMTP 
+	- Web app style : Modern Light Bright Orange color tone
+		
