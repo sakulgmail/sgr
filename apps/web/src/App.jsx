@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, Route, Routes, useParams, useSearchParams } from "react-router-dom";
+import { Link, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import tanatexLogo from "../../../tanatex_logo2.png";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+const API_BASE = import.meta.env.DEV ? "" : (import.meta.env.VITE_API_BASE_URL || "");
 
 const STATUSES = [
   "submitted",
@@ -79,6 +80,7 @@ function Home() {
 }
 
 function LoginPage() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("requestor@gsr.local");
   const [password, setPassword] = useState("ChangeMe123!");
   const [status, setStatus] = useState("");
@@ -90,32 +92,39 @@ function LoginPage() {
         method: "POST",
         body: JSON.stringify({ email, password })
       });
+      const me = await api("/api/auth/me");
+      if (me?.user?.role === "ADMIN") {
+        navigate("/admin");
+        return;
+      }
       setStatus("Logged in successfully");
     } catch (err) {
       setStatus(err.message);
     }
   }
 
-  async function onLogout() {
-    try {
-      await api("/api/auth/logout", { method: "POST" });
-      setStatus("Logged out");
-    } catch (err) {
-      setStatus(err.message);
-    }
-  }
-
   return (
-    <Shell title="Login">
-      <form className="card grid" onSubmit={onSubmit}>
-        <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-        <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
-        <button type="submit">Sign in</button>
-        <button type="button" onClick={onLogout}>Logout</button>
-        <Link to="/forgot-password">Forgot password?</Link>
-        {status ? <small>{status}</small> : null}
-      </form>
-    </Shell>
+    <div className="login-screen">
+      <section className="login-center-panel">
+        <img className="login-logo" src={tanatexLogo} alt="Tanatex Chemicals" />
+        <h1 className="login-title">SAMPLING GOODS<br />REQUEST</h1>
+        <form className="login-form-figma" onSubmit={onSubmit}>
+          <h2>Sign in</h2>
+          <div className="login-signin-underline" />
+          <label className="login-field-row">
+            <span>Email</span>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </label>
+          <label className="login-field-row">
+            <span>Password</span>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </label>
+          <button type="submit">Login</button>
+          <Link to="/forgot-password" className="login-forgot-link">Forgot password?</Link>
+          {status ? <small>{status}</small> : null}
+        </form>
+      </section>
+    </div>
   );
 }
 

@@ -195,6 +195,168 @@ button:hover {
   background: var(--accent-dark);
 }
 
+.login-screen {
+  --login-side-band: clamp(24px, 17vw, 220px);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  background: linear-gradient(
+    90deg,
+    #f53030 0%,
+    #f53030 var(--login-side-band),
+    #e4022e var(--login-side-band),
+    #e4022e calc(100% - var(--login-side-band)),
+    #f53030 calc(100% - var(--login-side-band)),
+    #f53030 100%
+  );
+  color: #ffffff;
+}
+
+.login-center-panel {
+  width: min(760px, calc(100% - (var(--login-side-band) * 2)));
+  min-width: 0;
+  padding: 42px 68px 50px;
+}
+
+.login-logo {
+  width: clamp(140px, 42%, 300px);
+  height: auto;
+  display: block;
+  margin: 4px 0 48px;
+}
+
+.login-title {
+  margin: 0 0 70px;
+  color: #fff;
+  text-align: center;
+  font-size: clamp(21px, 3vw, 32px);
+  line-height: 1.04;
+  letter-spacing: 0.02em;
+  font-weight: 800;
+}
+
+.login-form-figma {
+  display: grid;
+  gap: 22px;
+}
+
+.login-form-figma h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 27px;
+  font-weight: 700;
+}
+
+.login-signin-underline {
+  width: 120px;
+  border-bottom: 4px solid #fff;
+  margin-top: -8px;
+}
+
+.login-field-row {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  align-items: center;
+  gap: 18px;
+  color: #fff;
+}
+
+.login-field-row span {
+  font-size: 25px;
+  font-weight: 700;
+}
+
+.login-field-row input {
+  width: 100%;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  border-radius: 0;
+  padding: 14px 16px;
+  font-size: 16px;
+  color: #fff;
+  background: transparent;
+}
+
+.login-field-row input::placeholder {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.login-field-row input:focus {
+  outline: none;
+  border-color: #ffffff;
+}
+
+.login-form-figma button {
+  width: min(380px, 100%);
+  justify-self: center;
+  margin-top: 20px;
+  border: 2px solid #ffffff;
+  border-radius: 20px;
+  background: transparent;
+  color: #fff;
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 16px 20px;
+}
+
+.login-form-figma button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.login-forgot-link {
+  justify-self: center;
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.login-form-figma small {
+  justify-self: center;
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .login-center-panel {
+    width: min(660px, calc(100% - (var(--login-side-band) * 2)));
+    padding: 22px 12px 30px;
+  }
+
+  .login-logo {
+    margin-bottom: 26px;
+  }
+
+  .login-title {
+    font-size: clamp(17px, 4vw, 25px);
+    margin-bottom: 34px;
+  }
+
+  .login-form-figma h2 {
+    font-size: 19px;
+  }
+
+  .login-signin-underline {
+    width: 86px;
+    border-bottom-width: 3px;
+  }
+
+  .login-field-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .login-field-row span,
+  .login-field-row input,
+  .login-form-figma button {
+    font-size: 15px;
+  }
+
+  .login-form-figma button {
+    border-radius: 14px;
+    width: 100%;
+    margin-top: 10px;
+  }
+}
+
 @media (max-width: 700px) {
   .topbar {
     align-items: start;

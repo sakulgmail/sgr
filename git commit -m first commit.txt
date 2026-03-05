@@ -1,0 +1,33 @@
+git commit -m "first commit"
+git status
+git push -u origin main
+
+Start API: 
+npm --workspace apps/api run dev
+
+Start web: 
+npm --workspace apps/web run dev
+npm --workspace apps/web run dev -- --host 0.0.0.0 --port 5173
+(เพื่อให้เครื่องอื่นใน LAN สามารถ access https:<server_ip>:5173/login)
+
+
+Login
+http://localhost:5173/login
+http://localhost:5173/admin
+
+admin@gsr.local
+ChangeMe123!
+
+API
+http://localhost:3000
+
+For production, you should switch to your real app URL (domain or fixed host), for example:
+
+https://gsr.yourcompany.com (recommended), or
+http://10.x.x.x:5173 if staying internal-only
+Then update env values accordingly:
+
+APP_BASE_URL=<production-web-url>
+VITE_API_BASE_URL=<production-api-url>
+So you don’t keep changing per machine, use a stable DNS name in production instead of raw IP.
+
