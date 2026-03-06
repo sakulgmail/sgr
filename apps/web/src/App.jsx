@@ -27,7 +27,11 @@ async function getCsrfToken() {
   return csrfTokenCache;
 }
 
-async function api(path, options = {}) {
+function isCsrfInvalidResponse(res, data) {
+  return res.status === 403 && typeof data?.error === "string" && /csrf/i.test(data.error);
+}
+
+async function doFetch(path, options = {}) {
   const method = (options.method || "GET").toUpperCase();
   const headers = {
     "Content-Type": "application/json",
@@ -43,6 +47,15 @@ async function api(path, options = {}) {
     headers
   });
   const data = await res.json().catch(() => ({}));
+  return { res, data };
+}
+
+async function api(path, options = {}) {
+  let { res, data } = await doFetch(path, options);
+  if (isCsrfInvalidResponse(res, data)) {
+    csrfTokenCache = null;
+    ({ res, data } = await doFetch(path, options));
+  }
   if (!res.ok) throw new Error(data.error || "Request failed");
   return data;
 }
@@ -50,23 +63,27 @@ async function api(path, options = {}) {
 function Shell({ title, children, pageClassName = "" }) {
   return (
     <div className={`page ${pageClassName}`.trim()}>
-      <header className="topbar">
-        <h1>GSR</h1>
-        <nav>
-          <Link to="/">Home</Link>
-          <Link to="/requestor">Requestor</Link>
-          <Link to="/manager">Manager</Link>
-          <Link to="/staff">Staff</Link>
-          <Link to="/logistics">Logistics</Link>
-          <Link to="/admin">Admin</Link>
-          <Link to="/create">Create</Link>
-          <Link to="/login">Login</Link>
-        </nav>
-      </header>
-      <main>
-        <h2>{title}</h2>
-        {children}
-      </main>
+      <div className="layout-side layout-side-left" aria-hidden="true" />
+      <div className="page-center">
+        <header className="topbar">
+          <h1>GSR</h1>
+          <nav>
+            <Link to="/">Home</Link>
+            <Link to="/requestor">Requestor</Link>
+            <Link to="/manager">Manager</Link>
+            <Link to="/staff">Staff</Link>
+            <Link to="/logistics">Logistics</Link>
+            <Link to="/admin">Admin</Link>
+            <Link to="/create">Create</Link>
+            <Link to="/login">Login</Link>
+          </nav>
+        </header>
+        <main>
+          <h2>{title}</h2>
+          {children}
+        </main>
+      </div>
+      <div className="layout-side layout-side-right" aria-hidden="true" />
     </div>
   );
 }
@@ -105,25 +122,31 @@ function LoginPage() {
 
   return (
     <div className="login-screen">
+      <div className="layout-side layout-side-left" aria-hidden="true" />
       <section className="login-center-panel">
-        <img className="login-logo" src={tanatexLogo} alt="Tanatex Chemicals" />
-        <h1 className="login-title">SAMPLING GOODS<br />REQUEST</h1>
-        <form className="login-form-figma" onSubmit={onSubmit}>
-          <h2>Sign in</h2>
-          <div className="login-signin-underline" />
-          <label className="login-field-row">
-            <span>Email</span>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </label>
-          <label className="login-field-row">
-            <span>Password</span>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          </label>
-          <button type="submit">Login</button>
-          <Link to="/forgot-password" className="login-forgot-link">Forgot password?</Link>
-          {status ? <small>{status}</small> : null}
-        </form>
+        <div className="login-center-content">
+          <img className="login-logo" src={tanatexLogo} alt="Tanatex Chemicals" />
+          <h1 className="login-title">SAMPLING GOODS<br />REQUEST</h1>
+          <form className="login-form-figma" onSubmit={onSubmit}>
+            <h2>Sign in</h2>
+            <div className="login-signin-underline" />
+            <label className="login-field-row">
+              <span>Email</span>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </label>
+            <label className="login-field-row">
+              <span>Password</span>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            </label>
+            <div className="login-actions">
+              <button type="submit">Login</button>
+              <Link to="/forgot-password" className="login-forgot-link">Forgot password?</Link>
+              {status ? <small>{status}</small> : null}
+            </div>
+          </form>
+        </div>
       </section>
+      <div className="layout-side layout-side-right" aria-hidden="true" />
     </div>
   );
 }
@@ -512,6 +535,7 @@ function CreateRequestPage() {
 }
 
 function AdminPage() {
+  const navigate = useNavigate();
   const [me, setMe] = useState(null);
   const [msg, setMsg] = useState("");
   const [section, setSection] = useState("user-create");
@@ -562,7 +586,8 @@ function AdminPage() {
   });
   const [addProductForm, setAddProductForm] = useState({
     name: "",
-    parentId: "",
+    categoryId: "",
+    subcategoryId: "",
     sortOrder: 0,
     isActive: true
   });
@@ -644,10 +669,37 @@ function AdminPage() {
 
   const categoryNodes = useMemo(() => nodes.filter((n) => n.nodeType !== "PRODUCT"), [nodes]);
   const productNodes = useMemo(() => nodes.filter((n) => n.nodeType === "PRODUCT"), [nodes]);
+  const activeCategories = useMemo(
+    () => nodes.filter((n) => n.nodeType === "CATEGORY" && n.isActive),
+    [nodes]
+  );
+  const activeSubcategories = useMemo(
+    () => nodes.filter((n) => n.nodeType === "SUBCATEGORY" && n.isActive),
+    [nodes]
+  );
+  const addProductSubcategoryOptions = useMemo(
+    () => activeSubcategories.filter((n) => n.parentId === addProductForm.categoryId),
+    [activeSubcategories, addProductForm.categoryId]
+  );
   const activeParentCandidates = useMemo(
     () => nodes.filter((n) => n.nodeType !== "PRODUCT" && n.isActive),
     [nodes]
   );
+
+  function normalizeCatalogName(name) {
+    return String(name || "").trim().toLowerCase();
+  }
+
+  function hasDuplicateCatalogNode({ nodeType, name, parentId, excludeId = null }) {
+    const normalized = normalizeCatalogName(name);
+    if (!normalized) return false;
+    return nodes.some((n) => (
+      n.id !== excludeId
+      && n.nodeType === nodeType
+      && (n.parentId || null) === (parentId || null)
+      && normalizeCatalogName(n.name) === normalized
+    ));
+  }
 
   function labelFor(node) {
     const names = [node.name];
@@ -748,12 +800,25 @@ function AdminPage() {
   async function onCreateCategoryLike(e) {
     e.preventDefault();
     try {
+      const parentId = addCategoryForm.nodeType === "CATEGORY" ? null : (addCategoryForm.parentId || null);
+      if (hasDuplicateCatalogNode({
+        nodeType: addCategoryForm.nodeType,
+        name: addCategoryForm.name,
+        parentId
+      })) {
+        setMsg(
+          addCategoryForm.nodeType === "CATEGORY"
+            ? "Category name already exists"
+            : "Sub-Category name already exists under this parent"
+        );
+        return;
+      }
       await api("/api/admin/catalog/nodes", {
         method: "POST",
         body: JSON.stringify({
           name: addCategoryForm.name,
           nodeType: addCategoryForm.nodeType,
-          parentId: addCategoryForm.nodeType === "CATEGORY" ? null : (addCategoryForm.parentId || null),
+          parentId,
           sortOrder: Number(addCategoryForm.sortOrder || 0)
         })
       });
@@ -768,17 +833,30 @@ function AdminPage() {
   async function onCreateProduct(e) {
     e.preventDefault();
     try {
+      if (!addProductForm.categoryId) {
+        setMsg("Please select a category");
+        return;
+      }
+      const parentId = addProductForm.subcategoryId || addProductForm.categoryId || null;
+      if (hasDuplicateCatalogNode({
+        nodeType: "PRODUCT",
+        name: addProductForm.name,
+        parentId
+      })) {
+        setMsg("Product name already exists under this parent");
+        return;
+      }
       await api("/api/admin/catalog/nodes", {
         method: "POST",
         body: JSON.stringify({
           name: addProductForm.name,
           nodeType: "PRODUCT",
-          parentId: addProductForm.parentId || null,
+          parentId,
           sortOrder: Number(addProductForm.sortOrder || 0)
         })
       });
       setMsg("Product created");
-      setAddProductForm({ name: "", parentId: "", sortOrder: 0, isActive: true });
+      setAddProductForm({ name: "", categoryId: "", subcategoryId: "", sortOrder: 0, isActive: true });
       await loadNodes();
     } catch (err) {
       setMsg(err.message);
@@ -802,11 +880,25 @@ function AdminPage() {
     if (!editCategoryId) return;
     try {
       const node = categoryNodes.find((n) => n.id === editCategoryId);
+      const parentId = node?.nodeType === "CATEGORY" ? null : (editCategoryForm.parentId || null);
+      if (hasDuplicateCatalogNode({
+        nodeType: node?.nodeType,
+        name: editCategoryForm.name,
+        parentId,
+        excludeId: editCategoryId
+      })) {
+        setMsg(
+          node?.nodeType === "CATEGORY"
+            ? "Category name already exists"
+            : "Sub-Category name already exists under this parent"
+        );
+        return;
+      }
       await api(`/api/admin/catalog/nodes/${editCategoryId}`, {
         method: "PATCH",
         body: JSON.stringify({
           name: editCategoryForm.name,
-          parentId: node?.nodeType === "CATEGORY" ? null : (editCategoryForm.parentId || null),
+          parentId,
           sortOrder: Number(editCategoryForm.sortOrder || 0),
           isActive: Boolean(editCategoryForm.isActive)
         })
@@ -834,6 +926,15 @@ function AdminPage() {
     e.preventDefault();
     if (!editProductId) return;
     try {
+      if (hasDuplicateCatalogNode({
+        nodeType: "PRODUCT",
+        name: editProductForm.name,
+        parentId: editProductForm.parentId || null,
+        excludeId: editProductId
+      })) {
+        setMsg("Product name already exists under this parent");
+        return;
+      }
       await api(`/api/admin/catalog/nodes/${editProductId}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -899,6 +1000,15 @@ function AdminPage() {
     }
   }
 
+  async function onAdminLogout() {
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+      navigate("/login");
+    } catch (err) {
+      setMsg(err.message);
+    }
+  }
+
   async function onSearchAuditLogs(e) {
     e.preventDefault();
     try {
@@ -930,30 +1040,38 @@ function AdminPage() {
   }
 
   return (
-    <Shell title="Admin Console" pageClassName="page-admin">
-      {msg ? <div className="card"><small>{msg}</small></div> : null}
-      <div className="admin-layout">
-        <aside className="admin-sidebar card">
-          <h3>User Management</h3>
-          {navButton("user-create", "Create User")}
-          {navButton("user-edit", "Edit User")}
+    <div className="page page-admin">
+      <div className="layout-side layout-side-left" aria-hidden="true" />
+      <div className="page-center admin-page-center">
+        <div className="admin-frame">
+          <header className="admin-topbar">
+            <img className="admin-header-logo" src={tanatexLogo} alt="Tanatex Chemicals" />
+            <button type="button" className="admin-logout-btn" onClick={onAdminLogout}>Logout</button>
+          </header>
+          <div className="admin-separator" />
+          {msg ? <div className="admin-status"><small>{msg}</small></div> : null}
+          <div className="admin-layout">
+            <aside className="admin-sidebar">
+              <h3>User Management</h3>
+              {navButton("user-create", "Create User")}
+              {navButton("user-edit", "Edit User")}
 
-          <h3>Product Catalog</h3>
-          {navButton("catalog-add-category", "Add Category")}
-          {navButton("catalog-edit-category", "Edit Category")}
-          {navButton("catalog-add-product", "Add Product")}
-          {navButton("catalog-edit-product", "Edit Product")}
-          {navButton("catalog-delete-product", "Delete Product")}
+              <h3>Product Catalog</h3>
+              {navButton("catalog-add-category", "Add Category")}
+              {navButton("catalog-edit-category", "Edit Category")}
+              {navButton("catalog-add-product", "Add Product")}
+              {navButton("catalog-edit-product", "Edit Product")}
+              {navButton("catalog-delete-product", "Delete Product")}
 
-          <h3>System</h3>
-          {navButton("audit-logs", "Audit Logs")}
-          {navButton("system-settings", "System Settings")}
-          {navButton("send-email-test", "Send Email Test")}
-        </aside>
+              <h3>System</h3>
+              {navButton("audit-logs", "Audit Logs")}
+              {navButton("system-settings", "System Settings")}
+              {navButton("send-email-test", "Send Email Test")}
+            </aside>
 
-        <section className="admin-content">
-          {section === "user-create" ? (
-            <form className="card grid" onSubmit={onCreateUser}>
+            <section className="admin-content">
+            {section === "user-create" ? (
+              <form className="card grid" onSubmit={onCreateUser}>
               <h3>Create User</h3>
               <label>
                 Email
@@ -980,8 +1098,8 @@ function AdminPage() {
                 <input type="password" value={createUserForm.password} onChange={(e) => setCreateUserForm({ ...createUserForm, password: e.target.value })} />
               </label>
               <button type="submit">Create User</button>
-            </form>
-          ) : null}
+              </form>
+            ) : null}
 
           {section === "user-edit" ? (
             <form className="card grid" onSubmit={onSaveEditUser}>
@@ -1105,11 +1223,27 @@ function AdminPage() {
                 <input value={addProductForm.name} onChange={(e) => setAddProductForm({ ...addProductForm, name: e.target.value })} />
               </label>
               <label>
-                Belongs To (Category/Sub-Category)
-                <select value={addProductForm.parentId} onChange={(e) => setAddProductForm({ ...addProductForm, parentId: e.target.value })}>
-                  <option value="">Select parent</option>
-                  {activeParentCandidates.map((n) => (
-                    <option key={n.id} value={n.id}>{labelFor(n)} ({n.nodeType})</option>
+                Category
+                <select
+                  value={addProductForm.categoryId}
+                  onChange={(e) => setAddProductForm({ ...addProductForm, categoryId: e.target.value, subcategoryId: "" })}
+                >
+                  <option value="">Select category</option>
+                  {activeCategories.map((n) => (
+                    <option key={n.id} value={n.id}>{n.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Sub-Category (optional)
+                <select
+                  value={addProductForm.subcategoryId}
+                  onChange={(e) => setAddProductForm({ ...addProductForm, subcategoryId: e.target.value })}
+                  disabled={!addProductForm.categoryId}
+                >
+                  <option value="">{addProductForm.categoryId ? "Select sub-category" : "Select category first"}</option>
+                  {addProductSubcategoryOptions.map((n) => (
+                    <option key={n.id} value={n.id}>{n.name}</option>
                   ))}
                 </select>
               </label>
@@ -1277,9 +1411,12 @@ function AdminPage() {
               <button type="button" onClick={onSendTestEmail}>Send Test Email</button>
             </div>
           ) : null}
-        </section>
+            </section>
+          </div>
+        </div>
       </div>
-    </Shell>
+      <div className="layout-side layout-side-right" aria-hidden="true" />
+    </div>
   );
 }
 function WorkRequestDetailPage() {

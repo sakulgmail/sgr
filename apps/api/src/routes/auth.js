@@ -16,24 +16,29 @@ authRouter.use(authLimiter);
 authRouter.get("/csrf-token", issueCsrfToken);
 
 authRouter.post("/login", async (req, res) => {
-  const parsed = loginSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Invalid payload" });
-  const email = parsed.data.email.trim().toLowerCase();
+  try {
+    const parsed = loginSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid payload" });
+    const email = parsed.data.email.trim().toLowerCase();
 
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !user.isActive) return res.status(401).json({ error: "Invalid credentials" });
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || !user.isActive) return res.status(401).json({ error: "Invalid credentials" });
 
-  const ok = await bcrypt.compare(parsed.data.password, user.passwordHash);
-  if (!ok) return res.status(401).json({ error: "Invalid credentials" });
+    const ok = await bcrypt.compare(parsed.data.password, user.passwordHash);
+    if (!ok) return res.status(401).json({ error: "Invalid credentials" });
 
-  req.session.user = {
-    id: user.id,
-    email: user.email,
-    role: user.role,
-    staffType: user.staffType
-  };
+    req.session.user = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      staffType: user.staffType
+    };
 
-  return res.json({ ok: true, user: req.session.user });
+    return res.json({ ok: true, user: req.session.user });
+  } catch (err) {
+    console.error("Login failed", err);
+    return res.status(500).json({ error: "Login failed, please try again" });
+  }
 });
 
 authRouter.get("/me", (req, res) => {

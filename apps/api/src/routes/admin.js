@@ -18,6 +18,13 @@ export const adminRouter = Router();
 
 adminRouter.use(requireRoles(["ADMIN"]));
 
+function duplicateNodeError(nodeType) {
+  if (nodeType === "CATEGORY") return "Category name already exists";
+  if (nodeType === "SUBCATEGORY") return "Sub-Category name already exists under this parent";
+  if (nodeType === "PRODUCT") return "Product name already exists under this parent";
+  return "Duplicate catalog node name";
+}
+
 adminRouter.get("/users", async (req, res) => {
   const { page, pageSize, skip, take } = parsePagination(req.query, {
     defaultPage: 1,
@@ -205,6 +212,16 @@ adminRouter.post("/catalog/nodes", async (req, res) => {
     return res.status(400).json({ error: "parentId is required for SUBCATEGORY and PRODUCT" });
   }
 
+  const duplicate = await prisma.productNode.findFirst({
+    where: {
+      nodeType,
+      parentId,
+      name: { equals: name, mode: "insensitive" }
+    },
+    select: { id: true }
+  });
+  if (duplicate) return res.status(409).json({ error: duplicateNodeError(nodeType) });
+
   const item = await prisma.productNode.create({
     data: {
       name,
@@ -298,6 +315,19 @@ adminRouter.patch("/catalog/nodes/:id", async (req, res) => {
       return res.status(400).json({ error: "Cannot disable a node with active children. Disable children first." });
     }
   }
+
+  const nextName = (patch.name !== undefined ? patch.name : node.name).trim();
+  const nextParentId = patch.parentId !== undefined ? patch.parentId : node.parentId;
+  const duplicate = await prisma.productNode.findFirst({
+    where: {
+      id: { not: id },
+      nodeType: node.nodeType,
+      parentId: nextParentId,
+      name: { equals: nextName, mode: "insensitive" }
+    },
+    select: { id: true }
+  });
+  if (duplicate) return res.status(409).json({ error: duplicateNodeError(node.nodeType) });
 
   const updated = await prisma.productNode.update({
     where: { id },
