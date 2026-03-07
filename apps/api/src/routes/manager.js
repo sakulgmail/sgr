@@ -154,6 +154,32 @@ managerRouter.post("/work-requests/:id/approve", requireRoles(["SALES_MANAGER", 
   return res.json(updated);
 });
 
+managerRouter.delete("/work-requests/:id", requireRoles(["SALES_MANAGER", "ADMIN"]), async (req, res) => {
+  const wr = await prisma.workRequest.findUnique({ where: { id: req.params.id } });
+  if (!wr) return res.status(404).json({ error: "Not found" });
+  if (wr.status === WORK_REQUEST_STATUSES.SHIPPED && req.session.user.role !== "ADMIN") {
+    return res.status(403).json({ error: "Only admin can delete shipped requests" });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.taskHandoff.deleteMany({ where: { workRequestId: wr.id } });
+    await tx.comment.deleteMany({ where: { workRequestId: wr.id } });
+    await tx.task.deleteMany({ where: { workRequestId: wr.id } });
+    await tx.workRequestAssignment.deleteMany({ where: { workRequestId: wr.id } });
+    await tx.workRequest.delete({ where: { id: wr.id } });
+  });
+
+  await createAuditLog({
+    actorUserId: req.session.user.id,
+    entityType: "work_request",
+    entityId: wr.id,
+    action: "delete_work_request",
+    before: { status: wr.status, workRequestNo: wr.workRequestNo }
+  });
+
+  return res.json({ ok: true });
+});
+
 managerRouter.post("/work-requests/:id/reset-status", requireRoles(["SALES_MANAGER", "ADMIN"]), async (req, res) => {
   const parsed = managerResetSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid payload" });

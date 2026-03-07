@@ -60,24 +60,48 @@ async function api(path, options = {}) {
   return data;
 }
 
-function Shell({ title, children, pageClassName = "" }) {
+function Shell({
+  title,
+  children,
+  pageClassName = "",
+  showNav = true,
+  onLogout = null,
+  headerVariant = "default",
+  headerLogo = null
+}) {
+  const isAdminHeader = headerVariant === "admin";
   return (
     <div className={`page ${pageClassName}`.trim()}>
       <div className="layout-side layout-side-left" aria-hidden="true" />
       <div className="page-center">
-        <header className="topbar">
-          <h1>GSR</h1>
-          <nav>
-            <Link to="/">Home</Link>
-            <Link to="/requestor">Requestor</Link>
-            <Link to="/manager">Manager</Link>
-            <Link to="/staff">Staff</Link>
-            <Link to="/logistics">Logistics</Link>
-            <Link to="/admin">Admin</Link>
-            <Link to="/create">Create</Link>
-            <Link to="/login">Login</Link>
-          </nav>
+        <header className={isAdminHeader ? "admin-topbar" : "topbar"}>
+          {isAdminHeader ? (
+            <>
+              {headerLogo ? <img className="admin-header-logo" src={headerLogo} alt="Tanatex Chemicals" /> : <h1>GSR</h1>}
+              {onLogout ? <button type="button" className="admin-logout-btn" onClick={onLogout}>Logout</button> : null}
+            </>
+          ) : (
+            <>
+              <h1>GSR</h1>
+              {showNav ? (
+                <nav>
+                  <Link to="/">Home</Link>
+                  <Link to="/requestor">Requestor</Link>
+                  <Link to="/manager">Manager</Link>
+                  <Link to="/staff">Staff</Link>
+                  <Link to="/logistics">Logistics</Link>
+                  <Link to="/admin">Admin</Link>
+                  <Link to="/create">Create</Link>
+                  <Link to="/login">Login</Link>
+                </nav>
+              ) : null}
+              {!showNav && onLogout ? (
+                <button type="button" className="topbar-logout-btn" onClick={onLogout}>Logout</button>
+              ) : null}
+            </>
+          )}
         </header>
+        {isAdminHeader ? <div className="admin-separator" /> : null}
         <main>
           <h2>{title}</h2>
           {children}
@@ -112,6 +136,22 @@ function LoginPage() {
       const me = await api("/api/auth/me");
       if (me?.user?.role === "ADMIN") {
         navigate("/admin");
+        return;
+      }
+      if (me?.user?.role === "REQUESTOR") {
+        navigate("/requestor");
+        return;
+      }
+      if (me?.user?.role === "SALES_MANAGER") {
+        navigate("/manager");
+        return;
+      }
+      if (me?.user?.role === "STAFF" && me?.user?.staffType === "LOGISTICS") {
+        navigate("/logistics");
+        return;
+      }
+      if (me?.user?.role === "STAFF") {
+        navigate("/staff");
         return;
       }
       setStatus("Logged in successfully");
@@ -211,6 +251,7 @@ function ResetPasswordPage() {
 }
 
 function RequestorPage() {
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -229,8 +270,26 @@ function RequestorPage() {
     loadItems().catch((e) => setError(e.message));
   }, [statusFilter, searchNo]);
 
+  async function onRequestorLogout() {
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+      navigate("/login");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   return (
-    <Shell title="Requestor Dashboard">
+    <Shell
+      title="Requestor Dashboard"
+      showNav={false}
+      onLogout={onRequestorLogout}
+      headerVariant="admin"
+      headerLogo={tanatexLogo}
+    >
+      <div className="card grid">
+        <button type="button" onClick={() => navigate("/create")}>Create New Request</button>
+      </div>
       <div className="card grid">
         <label>
           Status
@@ -257,7 +316,8 @@ function RequestorPage() {
 }
 
 function ManagerPage() {
-  const [status, setStatus] = useState("submitted");
+  const navigate = useNavigate();
+  const [status, setStatus] = useState("");
   const [items, setItems] = useState([]);
   const [msg, setMsg] = useState("");
 
@@ -267,12 +327,28 @@ function ManagerPage() {
       .catch((e) => setMsg(e.message));
   }, [status]);
 
+  async function onManagerLogout() {
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+      navigate("/login");
+    } catch (err) {
+      setMsg(err.message);
+    }
+  }
+
   return (
-    <Shell title="Sales Manager Dashboard">
+    <Shell
+      title="Sales Manager Dashboard"
+      showNav={false}
+      onLogout={onManagerLogout}
+      headerVariant="admin"
+      headerLogo={tanatexLogo}
+    >
       <div className="card grid">
         <label>
           Queue status
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">All status</option>
             {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </label>
@@ -290,6 +366,7 @@ function ManagerPage() {
 }
 
 function StaffPage() {
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [detailsByRequestId, setDetailsByRequestId] = useState({});
   const [ackCommentByTaskId, setAckCommentByTaskId] = useState({});
@@ -359,8 +436,23 @@ function StaffPage() {
     }
   }
 
+  async function onStaffLogout() {
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+      navigate("/login");
+    } catch (err) {
+      setMsg(err.message);
+    }
+  }
+
   return (
-    <Shell title="My Tasks">
+    <Shell
+      title="My Tasks"
+      showNav={false}
+      onLogout={onStaffLogout}
+      headerVariant="admin"
+      headerLogo={tanatexLogo}
+    >
       <div className="card grid">
         <label>
           Task state
@@ -438,6 +530,7 @@ function StaffPage() {
 }
 
 function LogisticsPage() {
+  const navigate = useNavigate();
   const [requestId, setRequestId] = useState("");
   const [url, setUrl] = useState("");
   const [status, setStatus] = useState("");
@@ -455,8 +548,23 @@ function LogisticsPage() {
     }
   }
 
+  async function onLogisticsLogout() {
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+      navigate("/login");
+    } catch (err) {
+      setStatus(err.message);
+    }
+  }
+
   return (
-    <Shell title="Shipping Update">
+    <Shell
+      title="Shipping Update"
+      showNav={false}
+      onLogout={onLogisticsLogout}
+      headerVariant="admin"
+      headerLogo={tanatexLogo}
+    >
       <form className="card grid" onSubmit={onShip}>
         <label>Work Request ID<input value={requestId} onChange={(e) => setRequestId(e.target.value)} /></label>
         <label>DHL Tracking URL<input type="url" value={url} onChange={(e) => setUrl(e.target.value)} /></label>
@@ -468,8 +576,11 @@ function LogisticsPage() {
 }
 
 function CreateRequestPage() {
+  const navigate = useNavigate();
   const [catalog, setCatalog] = useState([]);
   const [status, setStatus] = useState("");
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  const [selectedSubcategoryId, setSelectedSubcategoryId] = useState("");
   const [form, setForm] = useState({
     productNodeId: "",
     purpose: "Customer sampling",
@@ -483,7 +594,19 @@ function CreateRequestPage() {
     targetReceivingBy: new Date().toISOString().slice(0, 10)
   });
 
-  const products = useMemo(() => catalog.filter((c) => c.nodeType === "PRODUCT"), [catalog]);
+  const categories = useMemo(
+    () => catalog.filter((c) => c.nodeType === "CATEGORY" && c.isActive),
+    [catalog]
+  );
+  const subcategories = useMemo(
+    () => catalog.filter((c) => c.nodeType === "SUBCATEGORY" && c.isActive && c.parentId === selectedCategoryId),
+    [catalog, selectedCategoryId]
+  );
+  const products = useMemo(() => {
+    if (!selectedCategoryId) return [];
+    const parentId = selectedSubcategoryId || selectedCategoryId;
+    return catalog.filter((c) => c.nodeType === "PRODUCT" && c.isActive && c.parentId === parentId);
+  }, [catalog, selectedCategoryId, selectedSubcategoryId]);
 
   useEffect(() => {
     api("/api/catalog/tree")
@@ -504,12 +627,67 @@ function CreateRequestPage() {
     }
   }
 
+  async function onCreateRequestLogout() {
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+      navigate("/login");
+    } catch (err) {
+      setStatus(err.message);
+    }
+  }
+
   return (
-    <Shell title="Create Request">
+    <Shell
+      title="Create Request"
+      showNav={false}
+      onLogout={onCreateRequestLogout}
+      headerVariant="admin"
+      headerLogo={tanatexLogo}
+    >
       <form className="card grid" onSubmit={onSubmit}>
         <label>
+          Category
+          <select
+            value={selectedCategoryId}
+            onChange={(e) => {
+              setSelectedCategoryId(e.target.value);
+              setSelectedSubcategoryId("");
+              setForm({ ...form, productNodeId: "" });
+            }}
+          >
+            <option value="">Select category</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Sub-category
+          <select
+            value={selectedSubcategoryId}
+            onChange={(e) => {
+              setSelectedSubcategoryId(e.target.value);
+              setForm({ ...form, productNodeId: "" });
+            }}
+            disabled={!selectedCategoryId}
+          >
+            <option value="">{selectedCategoryId ? "Select sub-category (optional)" : "Select category first"}</option>
+            {subcategories.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
           Product
-          <select value={form.productNodeId} onChange={(e) => setForm({ ...form, productNodeId: e.target.value })}>
+          <select
+            value={form.productNodeId}
+            onChange={(e) => setForm({ ...form, productNodeId: e.target.value })}
+            disabled={!selectedCategoryId}
+          >
             <option value="">Select product</option>
             {products.map((p) => (
               <option key={p.id} value={p.id}>
@@ -584,6 +762,7 @@ function AdminPage() {
     parentId: "",
     sortOrder: 0
   });
+  const [addCategoryStatus, setAddCategoryStatus] = useState("");
   const [addProductForm, setAddProductForm] = useState({
     name: "",
     categoryId: "",
@@ -591,7 +770,10 @@ function AdminPage() {
     sortOrder: 0,
     isActive: true
   });
+  const [addProductStatus, setAddProductStatus] = useState("");
   const [editCategoryId, setEditCategoryId] = useState("");
+  const [editCategoryCategoryId, setEditCategoryCategoryId] = useState("");
+  const [editCategorySubcategoryId, setEditCategorySubcategoryId] = useState("");
   const [editCategoryForm, setEditCategoryForm] = useState({
     name: "",
     parentId: "",
@@ -599,12 +781,19 @@ function AdminPage() {
     isActive: true
   });
   const [editProductId, setEditProductId] = useState("");
+  const [editProductCategoryId, setEditProductCategoryId] = useState("");
+  const [editProductSubcategoryId, setEditProductSubcategoryId] = useState("");
   const [editProductForm, setEditProductForm] = useState({
     name: "",
     parentId: "",
     sortOrder: 0,
     isActive: true
   });
+  const [deleteUserId, setDeleteUserId] = useState("");
+  const [deleteCategoryId, setDeleteCategoryId] = useState("");
+  const [deleteSubcategoryId, setDeleteSubcategoryId] = useState("");
+  const [deleteProductCategoryId, setDeleteProductCategoryId] = useState("");
+  const [deleteProductSubcategoryId, setDeleteProductSubcategoryId] = useState("");
   const [deleteProductId, setDeleteProductId] = useState("");
 
   const [auditFilter, setAuditFilter] = useState({
@@ -669,6 +858,15 @@ function AdminPage() {
 
   const categoryNodes = useMemo(() => nodes.filter((n) => n.nodeType !== "PRODUCT"), [nodes]);
   const productNodes = useMemo(() => nodes.filter((n) => n.nodeType === "PRODUCT"), [nodes]);
+  const activeCategoryNodes = useMemo(() => categoryNodes.filter((n) => n.isActive), [categoryNodes]);
+  const activeCategoryLevelNodes = useMemo(
+    () => activeCategoryNodes.filter((n) => n.nodeType === "CATEGORY"),
+    [activeCategoryNodes]
+  );
+  const activeSubcategoryByDeleteCategory = useMemo(
+    () => activeCategoryNodes.filter((n) => n.nodeType === "SUBCATEGORY" && n.parentId === deleteCategoryId),
+    [activeCategoryNodes, deleteCategoryId]
+  );
   const activeCategories = useMemo(
     () => nodes.filter((n) => n.nodeType === "CATEGORY" && n.isActive),
     [nodes]
@@ -677,14 +875,42 @@ function AdminPage() {
     () => nodes.filter((n) => n.nodeType === "SUBCATEGORY" && n.isActive),
     [nodes]
   );
+  const categoryLevelNodes = useMemo(
+    () => categoryNodes.filter((n) => n.nodeType === "CATEGORY"),
+    [categoryNodes]
+  );
+  const editCategorySubcategoryOptions = useMemo(
+    () => categoryNodes.filter((n) => n.nodeType === "SUBCATEGORY" && n.parentId === editCategoryCategoryId),
+    [categoryNodes, editCategoryCategoryId]
+  );
   const addProductSubcategoryOptions = useMemo(
     () => activeSubcategories.filter((n) => n.parentId === addProductForm.categoryId),
     [activeSubcategories, addProductForm.categoryId]
   );
+  const editProductSubcategoryOptions = useMemo(
+    () => categoryNodes.filter((n) => n.nodeType === "SUBCATEGORY" && n.parentId === editProductCategoryId),
+    [categoryNodes, editProductCategoryId]
+  );
+  const editProductOptions = useMemo(() => {
+    if (!editProductCategoryId) return [];
+    const parentId = editProductSubcategoryId || editProductCategoryId;
+    return productNodes.filter((p) => p.parentId === parentId);
+  }, [productNodes, editProductCategoryId, editProductSubcategoryId]);
+  const deleteProductOptions = useMemo(() => {
+    if (!deleteProductCategoryId) return [];
+    const parentId = deleteProductSubcategoryId || deleteProductCategoryId;
+    return productNodes.filter((p) => p.parentId === parentId);
+  }, [productNodes, deleteProductCategoryId, deleteProductSubcategoryId]);
   const activeParentCandidates = useMemo(
     () => nodes.filter((n) => n.nodeType !== "PRODUCT" && n.isActive),
     [nodes]
   );
+  const addCategoryParentCandidates = useMemo(() => {
+    if (addCategoryForm.nodeType === "SUBCATEGORY") {
+      return activeParentCandidates.filter((n) => n.nodeType === "CATEGORY");
+    }
+    return activeParentCandidates;
+  }, [addCategoryForm.nodeType, activeParentCandidates]);
 
   function normalizeCatalogName(name) {
     return String(name || "").trim().toLowerCase();
@@ -729,6 +955,7 @@ function AdminPage() {
   async function onCreateUser(e) {
     e.preventDefault();
     try {
+      const createdName = createUserForm.displayName.trim() || createUserForm.email.trim();
       const assignment = assignmentToPayload(createUserForm.assignment);
       await api("/api/admin/users", {
         method: "POST",
@@ -741,6 +968,7 @@ function AdminPage() {
         })
       });
       setMsg("User created");
+      window.alert(`The ${createdName} user has been created successfully`);
       setCreateUserForm({ email: "", displayName: "", assignment: "REQUESTOR", password: "" });
       await loadUsers();
     } catch (err) {
@@ -785,12 +1013,28 @@ function AdminPage() {
 
   async function onDeleteUser() {
     if (!editUserId) return;
+    if (!window.confirm("Permanently delete this user? This cannot be undone.")) return;
     try {
       await api(`/api/admin/users/${editUserId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ isActive: false })
+        method: "DELETE"
       });
-      setMsg("User disabled (soft delete)");
+      setMsg("User deleted");
+      setEditUserId("");
+      await loadUsers();
+    } catch (err) {
+      setMsg(err.message);
+    }
+  }
+
+  async function onDeleteUserFromMenu() {
+    if (!deleteUserId) return;
+    if (!window.confirm("Permanently delete this user? This cannot be undone.")) return;
+    try {
+      await api(`/api/admin/users/${deleteUserId}`, {
+        method: "DELETE"
+      });
+      setMsg("User deleted");
+      setDeleteUserId("");
       await loadUsers();
     } catch (err) {
       setMsg(err.message);
@@ -800,13 +1044,17 @@ function AdminPage() {
   async function onCreateCategoryLike(e) {
     e.preventDefault();
     try {
+      if (!["CATEGORY", "SUBCATEGORY"].includes(addCategoryForm.nodeType)) {
+        setAddCategoryStatus("Please use Add Product to create products");
+        return;
+      }
       const parentId = addCategoryForm.nodeType === "CATEGORY" ? null : (addCategoryForm.parentId || null);
       if (hasDuplicateCatalogNode({
         nodeType: addCategoryForm.nodeType,
         name: addCategoryForm.name,
         parentId
       })) {
-        setMsg(
+        setAddCategoryStatus(
           addCategoryForm.nodeType === "CATEGORY"
             ? "Category name already exists"
             : "Sub-Category name already exists under this parent"
@@ -822,11 +1070,16 @@ function AdminPage() {
           sortOrder: Number(addCategoryForm.sortOrder || 0)
         })
       });
-      setMsg("Catalog node created");
+      setAddCategoryStatus(
+        addCategoryForm.nodeType === "CATEGORY"
+          ? "Category created successfully"
+          : "Sub-category created successfully"
+      );
+      setMsg("");
       setAddCategoryForm({ name: "", nodeType: "CATEGORY", parentId: "", sortOrder: 0 });
       await loadNodes();
     } catch (err) {
-      setMsg(err.message);
+      setAddCategoryStatus(err.message);
     }
   }
 
@@ -834,7 +1087,7 @@ function AdminPage() {
     e.preventDefault();
     try {
       if (!addProductForm.categoryId) {
-        setMsg("Please select a category");
+        setAddProductStatus("Please select a category");
         return;
       }
       const parentId = addProductForm.subcategoryId || addProductForm.categoryId || null;
@@ -843,7 +1096,7 @@ function AdminPage() {
         name: addProductForm.name,
         parentId
       })) {
-        setMsg("Product name already exists under this parent");
+        setAddProductStatus("Product name already exists under this parent");
         return;
       }
       await api("/api/admin/catalog/nodes", {
@@ -855,18 +1108,27 @@ function AdminPage() {
           sortOrder: Number(addProductForm.sortOrder || 0)
         })
       });
-      setMsg("Product created");
+      setAddProductStatus("Product created successfully");
+      setMsg("");
       setAddProductForm({ name: "", categoryId: "", subcategoryId: "", sortOrder: 0, isActive: true });
       await loadNodes();
     } catch (err) {
-      setMsg(err.message);
+      setAddProductStatus(err.message);
     }
   }
 
   function onSelectEditCategory(nodeId) {
     setEditCategoryId(nodeId);
     const node = categoryNodes.find((n) => n.id === nodeId);
-    if (!node) return;
+    if (!node) {
+      setEditCategoryForm({
+        name: "",
+        parentId: "",
+        sortOrder: 0,
+        isActive: true
+      });
+      return;
+    }
     setEditCategoryForm({
       name: node.name,
       parentId: node.parentId || "",
@@ -913,7 +1175,26 @@ function AdminPage() {
   function onSelectEditProduct(nodeId) {
     setEditProductId(nodeId);
     const node = productNodes.find((n) => n.id === nodeId);
-    if (!node) return;
+    if (!node) {
+      setEditProductForm({
+        name: "",
+        parentId: "",
+        sortOrder: 0,
+        isActive: true
+      });
+      return;
+    }
+
+    const parentNode = node.parentId ? nodesById.get(node.parentId) : null;
+    if (parentNode?.nodeType === "CATEGORY") {
+      setEditProductCategoryId(parentNode.id);
+      setEditProductSubcategoryId("");
+    } else if (parentNode?.nodeType === "SUBCATEGORY") {
+      setEditProductSubcategoryId(parentNode.id);
+      const categoryNode = parentNode.parentId ? nodesById.get(parentNode.parentId) : null;
+      setEditProductCategoryId(categoryNode?.nodeType === "CATEGORY" ? categoryNode.id : "");
+    }
+
     setEditProductForm({
       name: node.name,
       parentId: node.parentId || "",
@@ -953,12 +1234,33 @@ function AdminPage() {
 
   async function onDeleteProduct() {
     if (!deleteProductId) return;
+    if (!window.confirm("Permanently delete this product? This cannot be undone.")) return;
     try {
       await api(`/api/admin/catalog/nodes/${deleteProductId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ isActive: false })
+        method: "DELETE"
       });
-      setMsg("Product disabled (soft delete)");
+      setMsg("Product deleted");
+      setDeleteProductId("");
+      await loadNodes();
+    } catch (err) {
+      setMsg(err.message);
+    }
+  }
+
+  async function onDeleteCategoryNode(nodeId, label) {
+    if (!nodeId) return;
+    if (!window.confirm(`Permanently delete this ${label}? This cannot be undone.`)) return;
+    try {
+      await api(`/api/admin/catalog/nodes/${nodeId}`, {
+        method: "DELETE"
+      });
+      setMsg(`${label} deleted`);
+      if (label === "category") {
+        setDeleteCategoryId("");
+        setDeleteSubcategoryId("");
+      } else {
+        setDeleteSubcategoryId("");
+      }
       await loadNodes();
     } catch (err) {
       setMsg(err.message);
@@ -1026,12 +1328,12 @@ function AdminPage() {
     );
   }
 
-  function navButton(key, label) {
+  function navButton(key, label, className = "admin-nav-btn") {
     const active = section === key;
     return (
       <button
         type="button"
-        className={`admin-nav-btn${active ? " active" : ""}`}
+        className={`${className}${active ? " active" : ""}`}
         onClick={() => setSection(key)}
       >
         {label}
@@ -1046,7 +1348,12 @@ function AdminPage() {
         <div className="admin-frame">
           <header className="admin-topbar">
             <img className="admin-header-logo" src={tanatexLogo} alt="Tanatex Chemicals" />
-            <button type="button" className="admin-logout-btn" onClick={onAdminLogout}>Logout</button>
+            <div className="admin-top-actions">
+              {navButton("audit-logs", "Audit Logs", "admin-top-nav-btn")}
+              {navButton("system-settings", "System Settings", "admin-top-nav-btn")}
+              {navButton("send-email-test", "Send Email Test", "admin-top-nav-btn")}
+              <button type="button" className="admin-logout-btn" onClick={onAdminLogout}>Logout</button>
+            </div>
           </header>
           <div className="admin-separator" />
           {msg ? <div className="admin-status"><small>{msg}</small></div> : null}
@@ -1055,6 +1362,7 @@ function AdminPage() {
               <h3>User Management</h3>
               {navButton("user-create", "Create User")}
               {navButton("user-edit", "Edit User")}
+              {navButton("user-delete", "Delete User")}
 
               <h3>Product Catalog</h3>
               {navButton("catalog-add-category", "Add Category")}
@@ -1062,11 +1370,8 @@ function AdminPage() {
               {navButton("catalog-add-product", "Add Product")}
               {navButton("catalog-edit-product", "Edit Product")}
               {navButton("catalog-delete-product", "Delete Product")}
+              {navButton("catalog-delete-category", "Delete Category/Sub-Category")}
 
-              <h3>System</h3>
-              {navButton("audit-logs", "Audit Logs")}
-              {navButton("system-settings", "System Settings")}
-              {navButton("send-email-test", "Send Email Test")}
             </aside>
 
             <section className="admin-content">
@@ -1126,19 +1431,32 @@ function AdminPage() {
                   <label>
                     Change Status
                     <select value={editUserForm.isActive ? "true" : "false"} onChange={(e) => setEditUserForm({ ...editUserForm, isActive: e.target.value === "true" })}>
-                      <option value="true">Enable</option>
-                      <option value="false">Disable</option>
+                      <option value="true">Active</option>
+                      <option value="false">Lock</option>
                     </select>
                   </label>
                   <label>
                     Set New Password (optional)
                     <input type="password" value={editUserForm.newPassword} onChange={(e) => setEditUserForm({ ...editUserForm, newPassword: e.target.value })} />
                   </label>
-                  <button type="submit">Save User</button>
-                  <button type="button" onClick={onDeleteUser}>Delete User (Disable)</button>
+                  <button type="submit">Save</button>
                 </>
               ) : null}
             </form>
+          ) : null}
+
+          {section === "user-delete" ? (
+            <div className="card grid">
+              <h3>Delete User</h3>
+              <label>
+                Select User
+                <select value={deleteUserId} onChange={(e) => setDeleteUserId(e.target.value)}>
+                  <option value="">Select user</option>
+                  {users.map((u) => <option key={u.id} value={u.id}>{u.displayName} ({u.email})</option>)}
+                </select>
+              </label>
+              <button type="button" onClick={onDeleteUserFromMenu}>Delete User</button>
+            </div>
           ) : null}
 
           {section === "catalog-add-category" ? (
@@ -1153,14 +1471,13 @@ function AdminPage() {
                 <select value={addCategoryForm.nodeType} onChange={(e) => setAddCategoryForm({ ...addCategoryForm, nodeType: e.target.value })}>
                   <option value="CATEGORY">Category</option>
                   <option value="SUBCATEGORY">Sub-Category</option>
-                  <option value="PRODUCT">Product</option>
                 </select>
               </label>
               <label>
                 Parent
                 <select value={addCategoryForm.parentId} onChange={(e) => setAddCategoryForm({ ...addCategoryForm, parentId: e.target.value })}>
                   <option value="">No parent</option>
-                  {activeParentCandidates.map((n) => (
+                  {addCategoryParentCandidates.map((n) => (
                     <option key={n.id} value={n.id}>{labelFor(n)} ({n.nodeType})</option>
                   ))}
                 </select>
@@ -1170,6 +1487,7 @@ function AdminPage() {
                 <input type="number" value={addCategoryForm.sortOrder} onChange={(e) => setAddCategoryForm({ ...addCategoryForm, sortOrder: e.target.value })} />
               </label>
               <button type="submit">Add</button>
+              {addCategoryStatus ? <small>{addCategoryStatus}</small> : null}
             </form>
           ) : null}
 
@@ -1177,10 +1495,33 @@ function AdminPage() {
             <form className="card grid" onSubmit={onSaveCategoryEdit}>
               <h3>Edit Category</h3>
               <label>
-                Select Category / Sub-Category
-                <select value={editCategoryId} onChange={(e) => onSelectEditCategory(e.target.value)}>
-                  <option value="">Select</option>
-                  {categoryNodes.map((n) => <option key={n.id} value={n.id}>{labelFor(n)} ({n.nodeType})</option>)}
+                Select Category
+                <select
+                  value={editCategoryCategoryId}
+                  onChange={(e) => {
+                    const nextCategoryId = e.target.value;
+                    setEditCategoryCategoryId(nextCategoryId);
+                    setEditCategorySubcategoryId("");
+                    onSelectEditCategory(nextCategoryId);
+                  }}
+                >
+                  <option value="">Select category</option>
+                  {categoryLevelNodes.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
+                </select>
+              </label>
+              <label>
+                Select Sub-Category (optional)
+                <select
+                  value={editCategorySubcategoryId}
+                  onChange={(e) => {
+                    const nextSubcategoryId = e.target.value;
+                    setEditCategorySubcategoryId(nextSubcategoryId);
+                    onSelectEditCategory(nextSubcategoryId || editCategoryCategoryId);
+                  }}
+                  disabled={!editCategoryCategoryId}
+                >
+                  <option value="">{editCategoryCategoryId ? "Edit selected category" : "Select category first"}</option>
+                  {editCategorySubcategoryOptions.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
                 </select>
               </label>
               {editCategoryId ? (
@@ -1259,6 +1600,7 @@ function AdminPage() {
                 </select>
               </label>
               <button type="submit">Add Product</button>
+              {addProductStatus ? <small>{addProductStatus}</small> : null}
             </form>
           ) : null}
 
@@ -1266,12 +1608,61 @@ function AdminPage() {
             <form className="card grid" onSubmit={onSaveProductEdit}>
               <h3>Edit Product</h3>
               <label>
-                Select Product
-                <select value={editProductId} onChange={(e) => onSelectEditProduct(e.target.value)}>
-                  <option value="">Select product</option>
-                  {productNodes.map((p) => <option key={p.id} value={p.id}>{labelFor(p)}</option>)}
+                Select Category
+                <select
+                  value={editProductCategoryId}
+                  onChange={(e) => {
+                    setEditProductCategoryId(e.target.value);
+                    setEditProductSubcategoryId("");
+                    setEditProductId("");
+                    setEditProductForm({
+                      name: "",
+                      parentId: "",
+                      sortOrder: 0,
+                      isActive: true
+                    });
+                  }}
+                >
+                  <option value="">Select category</option>
+                  {categoryLevelNodes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </label>
+              <label>
+                Select Sub-Category (optional)
+                <select
+                  value={editProductSubcategoryId}
+                  onChange={(e) => {
+                    setEditProductSubcategoryId(e.target.value);
+                    setEditProductId("");
+                    setEditProductForm({
+                      name: "",
+                      parentId: "",
+                      sortOrder: 0,
+                      isActive: true
+                    });
+                  }}
+                  disabled={!editProductCategoryId}
+                >
+                  <option value="">{editProductCategoryId ? "Select sub-category" : "Select category first"}</option>
+                  {editProductSubcategoryOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </label>
+              <div className="grid">
+                <strong>Select Product</strong>
+                {editProductCategoryId ? null : <small>Select category first</small>}
+                {editProductCategoryId && editProductOptions.length === 0 ? <small>No products found for this selection</small> : null}
+                {editProductOptions.map((p) => (
+                  <label key={p.id}>
+                    <input
+                      type="radio"
+                      name="edit-product-select"
+                      checked={editProductId === p.id}
+                      onChange={() => onSelectEditProduct(p.id)}
+                    />
+                    {p.name}
+                  </label>
+                ))}
+              </div>
               {editProductId ? (
                 <>
                   <label>
@@ -1308,13 +1699,85 @@ function AdminPage() {
             <div className="card grid">
               <h3>Delete Product</h3>
               <label>
-                Select Product
-                <select value={deleteProductId} onChange={(e) => setDeleteProductId(e.target.value)}>
-                  <option value="">Select product</option>
-                  {productNodes.map((p) => <option key={p.id} value={p.id}>{labelFor(p)}</option>)}
+                Select Category
+                <select
+                  value={deleteProductCategoryId}
+                  onChange={(e) => {
+                    setDeleteProductCategoryId(e.target.value);
+                    setDeleteProductSubcategoryId("");
+                    setDeleteProductId("");
+                  }}
+                >
+                  <option value="">Select category</option>
+                  {categoryLevelNodes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </label>
-              <button type="button" onClick={onDeleteProduct}>Delete Product (Disable)</button>
+              <label>
+                Select Sub-Category (optional)
+                <select
+                  value={deleteProductSubcategoryId}
+                  onChange={(e) => {
+                    setDeleteProductSubcategoryId(e.target.value);
+                    setDeleteProductId("");
+                  }}
+                  disabled={!deleteProductCategoryId}
+                >
+                  <option value="">{deleteProductCategoryId ? "Select sub-category" : "Select category first"}</option>
+                  {categoryNodes
+                    .filter((n) => n.nodeType === "SUBCATEGORY" && n.parentId === deleteProductCategoryId)
+                    .map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </label>
+              <div className="grid">
+                <strong>Select Product</strong>
+                {deleteProductCategoryId ? null : <small>Select category first</small>}
+                {deleteProductCategoryId && deleteProductOptions.length === 0 ? <small>No products found for this selection</small> : null}
+                {deleteProductOptions.map((p) => (
+                  <label key={p.id}>
+                    <input
+                      type="radio"
+                      name="delete-product-select"
+                      checked={deleteProductId === p.id}
+                      onChange={() => setDeleteProductId(p.id)}
+                    />
+                    {p.name}
+                  </label>
+                ))}
+              </div>
+              <button type="button" onClick={onDeleteProduct}>Delete Product</button>
+            </div>
+          ) : null}
+
+          {section === "catalog-delete-category" ? (
+            <div className="card grid">
+              <h3>Delete Category / Sub-Category</h3>
+              <label>
+                Select Category
+                <select
+                  value={deleteCategoryId}
+                  onChange={(e) => {
+                    setDeleteCategoryId(e.target.value);
+                    setDeleteSubcategoryId("");
+                  }}
+                >
+                  <option value="">Select active category</option>
+                  {activeCategoryLevelNodes.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
+                </select>
+              </label>
+              <button type="button" onClick={() => onDeleteCategoryNode(deleteCategoryId, "category")}>Delete Category</button>
+              <label>
+                Select Sub-Category
+                <select
+                  value={deleteSubcategoryId}
+                  onChange={(e) => setDeleteSubcategoryId(e.target.value)}
+                  disabled={!deleteCategoryId}
+                >
+                  <option value="">{deleteCategoryId ? "Select active sub-category" : "Select category first"}</option>
+                  {activeSubcategoryByDeleteCategory.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
+                </select>
+              </label>
+              <button type="button" onClick={() => onDeleteCategoryNode(deleteSubcategoryId, "sub-category")}>Delete Sub-category</button>
+              <small>If child sub-categories or products still exist, deletion will be blocked until children are deleted first.</small>
             </div>
           ) : null}
 
@@ -1421,6 +1884,7 @@ function AdminPage() {
 }
 function WorkRequestDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [me, setMe] = useState(null);
   const [detail, setDetail] = useState(null);
   const [staff, setStaff] = useState([]);
@@ -1549,6 +2013,17 @@ function WorkRequestDetailPage() {
     }
   }
 
+  async function onDeleteRequest() {
+    if (!detail?.workRequestNo) return;
+    if (!window.confirm(`Delete ${detail.workRequestNo}? This cannot be undone.`)) return;
+    try {
+      await api(`/api/manager/work-requests/${id}`, { method: "DELETE" });
+      navigate("/manager");
+    } catch (err) {
+      setMsg(err.message);
+    }
+  }
+
   return (
     <Shell title="Work Request Details">
       {msg ? <div className="card"><small>{msg}</small></div> : null}
@@ -1670,6 +2145,11 @@ function WorkRequestDetailPage() {
                   <input value={resetReason} onChange={(e) => setResetReason(e.target.value)} />
                 </label>
                 <button type="button" onClick={onReset}>Reset</button>
+              </div>
+              <div className="card grid">
+                <h3>Delete Request</h3>
+                <small>Permanent delete. This cannot be undone.</small>
+                <button type="button" onClick={onDeleteRequest}>Delete Request</button>
               </div>
             </>
           ) : null}

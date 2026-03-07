@@ -11,11 +11,10 @@ import { issueCsrfToken } from "../middleware/csrf.js";
 export const authRouter = Router();
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
-authRouter.use(authLimiter);
 
 authRouter.get("/csrf-token", issueCsrfToken);
 
-authRouter.post("/login", async (req, res) => {
+authRouter.post("/login", authLimiter, async (req, res) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Invalid payload" });
@@ -50,7 +49,7 @@ authRouter.post("/logout", (req, res) => {
   req.session.destroy(() => res.json({ ok: true }));
 });
 
-authRouter.post("/forgot-password", async (req, res) => {
+authRouter.post("/forgot-password", authLimiter, async (req, res) => {
   const email = String(req.body?.email || "").trim().toLowerCase();
   if (!email) return res.status(400).json({ error: "Email required" });
 
@@ -78,7 +77,7 @@ authRouter.post("/forgot-password", async (req, res) => {
   return res.json({ ok: true });
 });
 
-authRouter.post("/reset-password", async (req, res) => {
+authRouter.post("/reset-password", authLimiter, async (req, res) => {
   const token = String(req.body?.token || "");
   const newPassword = String(req.body?.newPassword || "");
   if (!token || newPassword.length < 8) {

@@ -52,7 +52,7 @@ export const adminCreateUserSchema = z.object({
   displayName: z.string().min(1),
   role: z.enum(["REQUESTOR", "SALES_MANAGER", "STAFF", "ADMIN"]),
   staffType: z.enum(["PRODUCTION_ENGINEER", "PURCHASING", "LOGISTICS"]).nullable().optional(),
-  password: z.string().min(8)
+  password: z.string().min(8, "Password must be at least 8 characters")
 });
 
 export const adminPatchUserSchema = z.object({
@@ -60,7 +60,7 @@ export const adminPatchUserSchema = z.object({
   isActive: z.boolean().optional(),
   role: z.enum(["REQUESTOR", "SALES_MANAGER", "STAFF", "ADMIN"]).optional(),
   staffType: z.enum(["PRODUCTION_ENGINEER", "PURCHASING", "LOGISTICS"]).nullable().optional(),
-  newPassword: z.string().min(8).optional()
+  newPassword: z.string().min(8, "New password must be at least 8 characters").optional()
 });
 
 export const adminCreateCatalogNodeSchema = z.object({

@@ -25,6 +25,10 @@ function duplicateNodeError(nodeType) {
   return "Duplicate catalog node name";
 }
 
+function firstValidationError(parsed) {
+  return parsed?.error?.issues?.[0]?.message || "Invalid payload";
+}
+
 adminRouter.get("/users", async (req, res) => {
   const { page, pageSize, skip, take } = parsePagination(req.query, {
     defaultPage: 1,
@@ -53,7 +57,7 @@ adminRouter.get("/users", async (req, res) => {
 
 adminRouter.post("/users", async (req, res) => {
   const parsed = adminCreateUserSchema.safeParse(req.body || {});
-  if (!parsed.success) return res.status(400).json({ error: "Invalid payload" });
+  if (!parsed.success) return res.status(400).json({ error: firstValidationError(parsed) });
   const email = parsed.data.email.trim().toLowerCase();
   const displayName = parsed.data.displayName.trim();
   const role = parsed.data.role;
@@ -105,7 +109,7 @@ adminRouter.post("/users", async (req, res) => {
 
 adminRouter.patch("/users/:id", async (req, res) => {
   const parsed = adminPatchUserSchema.safeParse(req.body || {});
-  if (!parsed.success) return res.status(400).json({ error: "Invalid payload" });
+  if (!parsed.success) return res.status(400).json({ error: firstValidationError(parsed) });
 
   const id = req.params.id;
   const existing = await prisma.user.findUnique({ where: { id } });
@@ -171,6 +175,49 @@ adminRouter.patch("/users/:id", async (req, res) => {
   });
 
   return res.json(updated);
+});
+
+adminRouter.delete("/users/:id", async (req, res) => {
+  const id = req.params.id;
+  if (req.session?.user?.id === id) {
+    return res.status(400).json({ error: "You cannot delete your own account." });
+  }
+
+  const existing = await prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      email: true,
+      displayName: true,
+      role: true,
+      staffType: true,
+      isActive: true
+    }
+  });
+  if (!existing) return res.status(404).json({ error: "User not found" });
+
+  try {
+    await prisma.user.delete({ where: { id } });
+  } catch (err) {
+    if (err?.code === "P2003") {
+      return res.status(400).json({
+        error: "Cannot hard-delete this user because related records exist. Reassign or remove dependencies first."
+      });
+    }
+    throw err;
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: req.session.user.id,
+      entityType: "user",
+      entityId: id,
+      action: "delete_user",
+      before: existing
+    }
+  });
+
+  return res.json({ ok: true });
 });
 
 adminRouter.get("/catalog/nodes", async (req, res) => {
@@ -310,9 +357,34 @@ adminRouter.patch("/catalog/nodes/:id", async (req, res) => {
   }
 
   if (patch.isActive === false) {
-    const activeChildren = await prisma.productNode.count({ where: { parentId: id, isActive: true } });
-    if (activeChildren > 0) {
-      return res.status(400).json({ error: "Cannot disable a node with active children. Disable children first." });
+    const activeSubcategoryChildren = await prisma.productNode.count({
+      where: { parentId: id, isActive: true, nodeType: "SUBCATEGORY" }
+    });
+    const activeProductChildren = await prisma.productNode.count({
+      where: { parentId: id, isActive: true, nodeType: "PRODUCT" }
+    });
+
+    if (node.nodeType === "CATEGORY") {
+      if (activeSubcategoryChildren > 0) {
+        return res.status(400).json({ error: "Cannot delete category with active sub-categories. Delete sub-categories first." });
+      }
+      if (activeProductChildren > 0) {
+        return res.status(400).json({ error: "Cannot delete category with active products. Delete products first." });
+      }
+    }
+
+    if (node.nodeType === "SUBCATEGORY") {
+      if (activeProductChildren > 0) {
+        return res.status(400).json({ error: "Cannot delete sub-category with active products. Delete products first." });
+      }
+      if (activeSubcategoryChildren > 0) {
+        return res.status(400).json({ error: "Cannot delete sub-category with active sub-categories. Delete child sub-categories first." });
+      }
+    }
+
+    const otherActiveChildren = await prisma.productNode.count({ where: { parentId: id, isActive: true } });
+    if (otherActiveChildren > 0) {
+      return res.status(400).json({ error: "Cannot delete node with active children. Delete children first." });
     }
   }
 
@@ -356,6 +428,74 @@ adminRouter.patch("/catalog/nodes/:id", async (req, res) => {
   });
 
   return res.json(updated);
+});
+
+adminRouter.delete("/catalog/nodes/:id", async (req, res) => {
+  const id = req.params.id;
+  const node = await prisma.productNode.findUnique({ where: { id } });
+  if (!node) return res.status(404).json({ error: "Node not found" });
+
+  const subcategoryChildren = await prisma.productNode.count({
+    where: { parentId: id, nodeType: "SUBCATEGORY" }
+  });
+  const productChildren = await prisma.productNode.count({
+    where: { parentId: id, nodeType: "PRODUCT" }
+  });
+
+  if (node.nodeType === "CATEGORY") {
+    if (subcategoryChildren > 0) {
+      return res.status(400).json({ error: "Cannot delete category while sub-categories exist. Delete sub-categories first." });
+    }
+    if (productChildren > 0) {
+      return res.status(400).json({ error: "Cannot delete category while products exist. Delete products first." });
+    }
+  }
+
+  if (node.nodeType === "SUBCATEGORY") {
+    if (productChildren > 0) {
+      return res.status(400).json({ error: "Cannot delete sub-category while products exist. Delete products first." });
+    }
+    if (subcategoryChildren > 0) {
+      return res.status(400).json({ error: "Cannot delete sub-category while child sub-categories exist. Delete child sub-categories first." });
+    }
+  }
+
+  const before = {
+    id: node.id,
+    name: node.name,
+    nodeType: node.nodeType,
+    parentId: node.parentId,
+    sortOrder: node.sortOrder,
+    isActive: node.isActive
+  };
+
+  try {
+    await prisma.productNode.delete({ where: { id } });
+  } catch (err) {
+    if (err?.code === "P2003") {
+      if (node.nodeType === "PRODUCT") {
+        return res.status(400).json({
+          error: "Cannot delete this product because it is referenced by work requests."
+        });
+      }
+      return res.status(400).json({
+        error: "Cannot hard-delete this node because related records exist. Remove dependencies first."
+      });
+    }
+    throw err;
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: req.session.user.id,
+      entityType: "product_node",
+      entityId: id,
+      action: "delete_catalog_node",
+      before
+    }
+  });
+
+  return res.json({ ok: true });
 });
 
 adminRouter.get("/settings", async (_req, res) => {

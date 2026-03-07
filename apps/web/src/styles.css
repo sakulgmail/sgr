@@ -52,6 +52,20 @@ body {
   font-weight: 600;
 }
 
+.topbar-logout-btn {
+  background: transparent;
+  border: 0;
+  color: #9a3412;
+  text-decoration: none;
+  font-weight: 600;
+  padding: 0;
+}
+
+.topbar-logout-btn:hover {
+  text-decoration: underline;
+  background: transparent;
+}
+
 main {
   width: min(980px, 100% - 24px);
   margin: 20px auto;
@@ -89,21 +103,23 @@ h1 { color: var(--accent-dark); }
 
 .admin-layout {
   display: grid;
-  grid-template-columns: 220px minmax(0, 629px);
+  grid-template-columns: 220px minmax(0, 1fr);
   gap: 33px;
   align-items: start;
-  justify-content: start;
+  justify-content: stretch;
   padding: 18px 8px 22px;
 }
 
 .admin-page-center {
   min-height: 100vh;
   display: grid;
-  justify-content: start;
+  justify-content: stretch;
+  width: 100%;
 }
 
 .admin-frame {
-  width: min(932px, calc(100% - 24px));
+  width: calc(100% - 24px);
+  max-width: none;
 }
 
 .admin-topbar {
@@ -112,6 +128,35 @@ h1 { color: var(--accent-dark); }
   justify-content: space-between;
   gap: 10px;
   padding: 18px 22px 10px;
+}
+
+.admin-top-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.admin-top-nav-btn {
+  background: transparent;
+  border: 0;
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 700;
+  border-radius: 0;
+  padding: 4px 2px;
+}
+
+.admin-top-nav-btn:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+
+.admin-top-nav-btn.active {
+  background: transparent;
+  color: #ffffff;
+  text-decoration: underline;
 }
 
 .admin-header-logo {
@@ -205,6 +250,11 @@ h1 { color: var(--accent-dark); }
 .admin-content {
   display: grid;
   gap: 14px;
+  min-width: 0;
+}
+
+.admin-content .card {
+  width: 100%;
 }
 
 .page-admin .admin-content h3 {
@@ -429,6 +479,10 @@ button:hover {
     font-size: 15px;
   }
 
+  .admin-top-nav-btn {
+    font-size: 15px;
+  }
+
   .admin-sidebar h3 {
     font-size: 18px;
   }
@@ -495,6 +549,16 @@ button:hover {
     grid-template-columns: 1fr;
     gap: 14px;
     padding: 10px 12px 18px;
+  }
+
+  .admin-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .admin-top-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .admin-sidebar {
