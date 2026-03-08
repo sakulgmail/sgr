@@ -51,6 +51,12 @@ function summaryText({ item, path }, appBaseUrl) {
   ].join("\n");
 }
 
+function stakeholderCc(item, extra = []) {
+  const managerCc = managerEmails(item, extra);
+  const staffEmails = item.assignments.map((a) => a.user?.email).filter(Boolean);
+  return Array.from(new Set([...managerCc, ...staffEmails])).filter((e) => e && e !== item.requestor?.email);
+}
+
 export async function notifyOnSubmit(workRequestId) {
   const summary = await loadSummary(workRequestId);
   if (!summary) return;
@@ -145,5 +151,36 @@ export async function notifyOnShipped(workRequestId, dhlTrackingUrl, managerEmai
     cc,
     subject: `Shipped: ${summary.item.workRequestNo}`,
     text: `${summaryText(summary, settings.appBaseUrl)}\n\nDHL tracking URL: ${dhlTrackingUrl}`
+  });
+}
+
+export async function notifyOnRequestUpdated(workRequestId) {
+  const summary = await loadSummary(workRequestId);
+  if (!summary) return;
+  const settings = await getSystemSettings();
+  const cc = Array.from(new Set([
+    ...stakeholderCc(summary.item),
+    settings.manufacturingGroupEmail
+  ].filter(Boolean))).join(",");
+  await sendEmail({
+    to: summary.item.requestor.email,
+    cc,
+    subject: `Updated: ${summary.item.workRequestNo}`,
+    text: `${summaryText(summary, settings.appBaseUrl)}\n\nThis request was updated by the requestor.`
+  });
+}
+
+export async function notifyOnRequestDeleted(snapshot) {
+  if (!snapshot?.item) return;
+  const settings = await getSystemSettings();
+  const cc = Array.from(new Set([
+    ...stakeholderCc(snapshot.item),
+    settings.manufacturingGroupEmail
+  ].filter(Boolean))).join(",");
+  await sendEmail({
+    to: snapshot.item.requestor.email,
+    cc,
+    subject: `Deleted: ${snapshot.item.workRequestNo}`,
+    text: `${summaryText(snapshot, settings.appBaseUrl)}\n\nThis request was deleted by the requestor.`
   });
 }

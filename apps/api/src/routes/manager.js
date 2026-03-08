@@ -222,11 +222,16 @@ managerRouter.post("/work-requests/:id/ship", async (req, res) => {
   const parsed = managerShipSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid payload" });
   const dhlTrackingUrl = parsed.data.dhlTrackingUrl.trim();
-
-  const wr = await prisma.workRequest.findUnique({ where: { id: req.params.id } });
+  const comment = String(parsed.data.comment || "").trim();
+  const lookup = String(req.params.id || "").trim();
+  const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(lookup);
+  const wr = looksLikeUuid
+    ? await prisma.workRequest.findUnique({ where: { id: lookup } })
+    : await prisma.workRequest.findUnique({ where: { workRequestNo: lookup } });
   if (!wr) return res.status(404).json({ error: "Not found" });
-  if (wr.status !== WORK_REQUEST_STATUSES.READY_TO_SHIP) {
-    return res.status(400).json({ error: "Request is not ready_to_ship" });
+  const shippableStatuses = [WORK_REQUEST_STATUSES.APPROVED, WORK_REQUEST_STATUSES.READY_TO_SHIP];
+  if (!shippableStatuses.includes(wr.status)) {
+    return res.status(400).json({ error: "Request must be approved before shipping" });
   }
 
   const actor = await prisma.user.findUnique({ where: { id: req.session.user.id } });
@@ -252,13 +257,24 @@ managerRouter.post("/work-requests/:id/ship", async (req, res) => {
     }
   });
 
+  if (comment) {
+    await prisma.comment.create({
+      data: {
+        workRequestId: wr.id,
+        authorUserId: req.session.user.id,
+        commentType: "system",
+        body: `Shipping comment: ${comment}`
+      }
+    });
+  }
+
   await createAuditLog({
     actorUserId: req.session.user.id,
     entityType: "work_request",
     entityId: wr.id,
     action: "ship",
     before: { status: wr.status },
-    after: { status: updated.status, dhlTrackingUrl }
+    after: { status: updated.status, dhlTrackingUrl, comment: comment || null }
   });
 
   await notifyOnShipped(wr.id, dhlTrackingUrl, req.session.user.email);

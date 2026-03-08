@@ -66,6 +66,38 @@ body {
   background: transparent;
 }
 
+.requestor-detail-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.requestor-small-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+.page-admin .admin-content button.manager-decision-btn {
+  width: auto;
+  min-width: 84px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.manager-assign-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.page-admin .admin-content button.manager-assign-btn {
+  width: auto;
+  min-width: 84px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
 main {
   width: min(980px, 100% - 24px);
   margin: 20px auto;
@@ -505,6 +537,10 @@ button:hover {
     font-size: 12px;
   }
 
+  .page-admin .admin-content button.manager-decision-btn {
+    font-size: 12px;
+  }
+
   .login-title {
     font-size: clamp(15.75px, 2.25vw, 24px);
   }
@@ -617,6 +653,7 @@ button:hover {
   .login-actions {
     padding-left: 0;
   }
+
 
   .login-actions .login-forgot-link,
   .login-actions small {

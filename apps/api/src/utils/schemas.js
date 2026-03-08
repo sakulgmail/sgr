@@ -34,7 +34,8 @@ export const managerResetSchema = z.object({
 });
 
 export const managerShipSchema = z.object({
-  dhlTrackingUrl: z.string().url()
+  dhlTrackingUrl: z.string().url(),
+  comment: z.string().optional().nullable()
 });
 
 export const taskAcknowledgeSchema = z.object({

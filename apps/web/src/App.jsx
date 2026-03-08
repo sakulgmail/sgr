@@ -7,8 +7,6 @@ const API_BASE = import.meta.env.DEV ? "" : (import.meta.env.VITE_API_BASE_URL |
 const STATUSES = [
   "submitted",
   "approved",
-  "preparing_goods_sampling",
-  "ready_to_ship",
   "shipped",
   "rejected"
 ];
@@ -66,6 +64,7 @@ function Shell({
   pageClassName = "",
   showNav = true,
   onLogout = null,
+  onHome = null,
   headerVariant = "default",
   headerLogo = null
 }) {
@@ -78,7 +77,10 @@ function Shell({
           {isAdminHeader ? (
             <>
               {headerLogo ? <img className="admin-header-logo" src={headerLogo} alt="Tanatex Chemicals" /> : <h1>GSR</h1>}
-              {onLogout ? <button type="button" className="admin-logout-btn" onClick={onLogout}>Logout</button> : null}
+              <div className="admin-top-actions">
+                {onHome ? <button type="button" className="admin-logout-btn" onClick={onHome}>Home</button> : null}
+                {onLogout ? <button type="button" className="admin-logout-btn" onClick={onLogout}>Logout</button> : null}
+              </div>
             </>
           ) : (
             <>
@@ -283,6 +285,7 @@ function RequestorPage() {
     <Shell
       title="Requestor Dashboard"
       showNav={false}
+      onHome={() => navigate("/requestor")}
       onLogout={onRequestorLogout}
       headerVariant="admin"
       headerLogo={tanatexLogo}
@@ -308,6 +311,8 @@ function RequestorPage() {
         <div className="card" key={item.id}>
           <strong>{item.workRequestNo}</strong>
           <div>Status: {item.status}</div>
+          <div>Product: {item.productNode?.name || "-"}</div>
+          <div>Requestor: {item.requestor?.email || "-"}</div>
           <Link to={`/work-requests/${item.id}`}>Open details</Link>
         </div>
       ))}
@@ -531,20 +536,39 @@ function StaffPage() {
 
 function LogisticsPage() {
   const navigate = useNavigate();
+  const [items, setItems] = useState([]);
+  const [msg, setMsg] = useState("");
+  const [stateFilter, setStateFilter] = useState("");
+  const [requestStatusFilter, setRequestStatusFilter] = useState("");
   const [requestId, setRequestId] = useState("");
   const [url, setUrl] = useState("");
-  const [status, setStatus] = useState("");
+  const [shipComment, setShipComment] = useState("");
+  const [shipStatus, setShipStatus] = useState("");
+
+  async function loadTasks() {
+    const q = new URLSearchParams();
+    if (stateFilter) q.set("state", stateFilter);
+    if (requestStatusFilter) q.set("requestStatus", requestStatusFilter);
+    const d = await api(`/api/tasks/my${q.toString() ? `?${q.toString()}` : ""}`);
+    setItems(d.items || []);
+  }
+
+  useEffect(() => {
+    loadTasks().catch((e) => setMsg(e.message));
+  }, [stateFilter, requestStatusFilter]);
 
   async function onShip(e) {
     e.preventDefault();
     try {
       await api(`/api/manager/work-requests/${requestId}/ship`, {
         method: "POST",
-        body: JSON.stringify({ dhlTrackingUrl: url })
+        body: JSON.stringify({ dhlTrackingUrl: url, comment: shipComment })
       });
-      setStatus("Marked shipped");
+      setShipStatus("Marked shipped");
+      setShipComment("");
+      await loadTasks();
     } catch (err) {
-      setStatus(err.message);
+      setShipStatus(err.message);
     }
   }
 
@@ -553,7 +577,7 @@ function LogisticsPage() {
       await api("/api/auth/logout", { method: "POST" });
       navigate("/login");
     } catch (err) {
-      setStatus(err.message);
+      setMsg(err.message);
     }
   }
 
@@ -565,11 +589,50 @@ function LogisticsPage() {
       headerVariant="admin"
       headerLogo={tanatexLogo}
     >
+      <div className="card grid">
+        <label>
+          Task state
+          <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}>
+            <option value="">All</option>
+            <option value="active">active</option>
+            <option value="acknowledged">acknowledged</option>
+            <option value="finished">finished</option>
+          </select>
+        </label>
+        <label>
+          Request status
+          <select value={requestStatusFilter} onChange={(e) => setRequestStatusFilter(e.target.value)}>
+            <option value="">All</option>
+            {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="card">{msg || `My tasks: ${items.length}`}</div>
+      {items.map((task) => (
+        <div className="card grid" key={task.id}>
+          <strong>{task.workRequest?.workRequestNo || task.workRequestId}</strong>
+          <div>Request status: {task.workRequest?.status}</div>
+          <div>Task role: {task.taskRole}</div>
+          <div>Task state: {task.state}</div>
+          {(task.handoffNotes || []).length > 0 ? (
+            <div>
+              <strong>Handoff notes:</strong>
+              {task.handoffNotes.map((h) => (
+                <div key={h.id}>
+                  {h.note || "-"} ({h.fromUser?.displayName || h.fromUser?.email || "Unknown"} at {new Date(h.createdAt).toLocaleString()})
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <Link to={`/work-requests/${task.workRequestId}`}>Open details</Link>
+        </div>
+      ))}
       <form className="card grid" onSubmit={onShip}>
-        <label>Work Request ID<input value={requestId} onChange={(e) => setRequestId(e.target.value)} /></label>
+        <label>Work Request ID / No<input value={requestId} onChange={(e) => setRequestId(e.target.value)} /></label>
         <label>DHL Tracking URL<input type="url" value={url} onChange={(e) => setUrl(e.target.value)} /></label>
+        <label>Comment<input value={shipComment} onChange={(e) => setShipComment(e.target.value)} /></label>
         <button type="submit">Mark Shipped</button>
-        {status ? <small>{status}</small> : null}
+        {shipStatus ? <small>{shipStatus}</small> : null}
       </form>
     </Shell>
   );
@@ -640,6 +703,7 @@ function CreateRequestPage() {
     <Shell
       title="Create Request"
       showNav={false}
+      onHome={() => navigate("/requestor")}
       onLogout={onCreateRequestLogout}
       headerVariant="admin"
       headerLogo={tanatexLogo}
@@ -1887,20 +1951,39 @@ function WorkRequestDetailPage() {
   const navigate = useNavigate();
   const [me, setMe] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [catalog, setCatalog] = useState([]);
+  const [isEditingRequest, setIsEditingRequest] = useState(false);
+  const [requestEditForm, setRequestEditForm] = useState({
+    productNodeId: "",
+    purpose: "",
+    volumeKg: "",
+    unitCount: "",
+    receivingAddress: "",
+    receivingPersonFirstname: "",
+    receivingPersonLastname: "",
+    receivingPersonEmail: "",
+    receivingPersonPhone: "",
+    targetReceivingBy: ""
+  });
   const [staff, setStaff] = useState([]);
   const [msg, setMsg] = useState("");
   const [approveComment, setApproveComment] = useState("");
   const [rejectComment, setRejectComment] = useState("");
   const [resetReason, setResetReason] = useState("");
   const [resetStatus, setResetStatus] = useState("submitted");
-  const [counts, setCounts] = useState({
-    PRODUCTION_ENGINEER: 0,
-    PURCHASING: 0,
-    LOGISTICS: 0
-  });
   const [selectedAssigneeIds, setSelectedAssigneeIds] = useState([]);
+  const [managerAction, setManagerAction] = useState("");
+  const [showManagerResetForm, setShowManagerResetForm] = useState(false);
 
   const isManager = me?.role === "SALES_MANAGER" || me?.role === "ADMIN";
+  const isRequestor = me?.role === "REQUESTOR";
+  const isSubmitted = detail?.status === "submitted";
+  const showWorkflowSections = me?.role !== "REQUESTOR" && !(isManager && isSubmitted);
+  const canRequestorEditDelete = isRequestor && detail?.status === "submitted";
+  const requestProducts = useMemo(
+    () => catalog.filter((c) => c.nodeType === "PRODUCT" && c.isActive),
+    [catalog]
+  );
 
   async function loadDetail() {
     const d = await api(`/api/work-requests/${id}`);
@@ -1916,11 +1999,43 @@ function WorkRequestDetailPage() {
   }, [id]);
 
   useEffect(() => {
+    if (!isRequestor) return;
+    api("/api/catalog/tree")
+      .then((d) => setCatalog(d.items || []))
+      .catch((e) => setMsg(e.message));
+  }, [isRequestor]);
+
+  useEffect(() => {
+    if (!detail) return;
+    setRequestEditForm({
+      productNodeId: detail.productNodeId || "",
+      purpose: detail.purpose || "",
+      volumeKg: detail.volumeKg || "",
+      unitCount: detail.unitCount || "",
+      receivingAddress: detail.receivingAddress || "",
+      receivingPersonFirstname: detail.receivingPersonFirstname || "",
+      receivingPersonLastname: detail.receivingPersonLastname || "",
+      receivingPersonEmail: detail.receivingPersonEmail || "",
+      receivingPersonPhone: detail.receivingPersonPhone || "",
+      targetReceivingBy: detail.targetReceivingBy ? new Date(detail.targetReceivingBy).toISOString().slice(0, 10) : ""
+    });
+  }, [detail]);
+
+  useEffect(() => {
     if (!isManager) return;
     api("/api/manager/staff?page=1&pageSize=500")
       .then((d) => setStaff(d.items || []))
       .catch((e) => setMsg(e.message));
   }, [isManager]);
+
+  useEffect(() => {
+    if (!isManager) return;
+    if (!isSubmitted) setManagerAction("");
+  }, [isManager, isSubmitted]);
+
+  useEffect(() => {
+    if (isSubmitted) setShowManagerResetForm(false);
+  }, [isSubmitted]);
 
   const groupedStaff = useMemo(() => {
     const map = {};
@@ -1931,15 +2046,6 @@ function WorkRequestDetailPage() {
     return map;
   }, [staff]);
 
-  const countBasedSelection = useMemo(() => {
-    const picked = [];
-    for (const role of STAFF_ROLES) {
-      const c = Number(counts[role] || 0);
-      picked.push(...groupedStaff[role].slice(0, c).map((u) => u.id));
-    }
-    return picked;
-  }, [counts, groupedStaff]);
-
   const selectedAssigneeSet = useMemo(() => new Set(selectedAssigneeIds), [selectedAssigneeIds]);
 
   const selectedByRole = useMemo(() => {
@@ -1949,21 +2055,6 @@ function WorkRequestDetailPage() {
     }
     return out;
   }, [groupedStaff, selectedAssigneeSet]);
-
-  const shouldShowCountSection = useMemo(
-    () => STAFF_ROLES.some((role) => groupedStaff[role].length > 1),
-    [groupedStaff]
-  );
-
-  function setRoleCount(role, value) {
-    const max = groupedStaff[role].length;
-    const n = Math.max(0, Math.min(max, Number(value || 0)));
-    setCounts((prev) => ({ ...prev, [role]: n }));
-  }
-
-  function applyCountsToSelection() {
-    setSelectedAssigneeIds(countBasedSelection);
-  }
 
   function toggleManualAssignee(userId) {
     setSelectedAssigneeIds((prev) => (
@@ -2024,8 +2115,69 @@ function WorkRequestDetailPage() {
     }
   }
 
+  async function onSaveRequestEdit(e) {
+    e.preventDefault();
+    try {
+      await api(`/api/work-requests/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          productNodeId: requestEditForm.productNodeId,
+          purpose: requestEditForm.purpose,
+          volumeKg: Number(requestEditForm.volumeKg),
+          unitCount: Number(requestEditForm.unitCount),
+          receivingAddress: requestEditForm.receivingAddress,
+          receivingPersonFirstname: requestEditForm.receivingPersonFirstname,
+          receivingPersonLastname: requestEditForm.receivingPersonLastname,
+          receivingPersonEmail: requestEditForm.receivingPersonEmail,
+          receivingPersonPhone: requestEditForm.receivingPersonPhone,
+          targetReceivingBy: requestEditForm.targetReceivingBy
+        })
+      });
+      setMsg("Request updated");
+      setIsEditingRequest(false);
+      await loadDetail();
+    } catch (err) {
+      setMsg(err.message);
+    }
+  }
+
+  async function onDeleteRequestByRequestor() {
+    if (!window.confirm(`Delete ${detail?.workRequestNo}? This cannot be undone.`)) return;
+    try {
+      await api(`/api/work-requests/${id}`, { method: "DELETE" });
+      navigate("/requestor");
+    } catch (err) {
+      setMsg(err.message);
+    }
+  }
+
+  function detailHomePath() {
+    if (me?.role === "REQUESTOR") return "/requestor";
+    if (me?.role === "SALES_MANAGER") return "/manager";
+    if (me?.role === "ADMIN") return "/admin";
+    if (me?.role === "STAFF" && me?.staffType === "LOGISTICS") return "/logistics";
+    if (me?.role === "STAFF") return "/staff";
+    return "/";
+  }
+
+  async function onDetailLogout() {
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+      navigate("/login");
+    } catch (err) {
+      setMsg(err.message);
+    }
+  }
+
   return (
-    <Shell title="Work Request Details">
+    <Shell
+      title="Work Request Details"
+      showNav={false}
+      onHome={() => navigate(detailHomePath())}
+      onLogout={onDetailLogout}
+      headerVariant="admin"
+      headerLogo={tanatexLogo}
+    >
       {msg ? <div className="card"><small>{msg}</small></div> : null}
       {!detail ? (
         <div className="card">Loading...</div>
@@ -2034,123 +2186,215 @@ function WorkRequestDetailPage() {
           <div className="card grid">
             <strong>{detail.workRequestNo}</strong>
             <div>Status: {detail.status}</div>
+            <div>Category: {detail.productSummary?.category || "-"}</div>
+            <div>Sub-Category: {detail.productSummary?.subCategory || "-"}</div>
+            <div>Product: {detail.productSummary?.product || "-"}</div>
             <div>Purpose: {detail.purpose}</div>
             <div>Volume: {detail.volumeKg} kg</div>
             <div>Unit count: {detail.unitCount}</div>
+            <div>Receiving address: {detail.receivingAddress || "-"}</div>
+            <div>Receiving person first name: {detail.receivingPersonFirstname || "-"}</div>
+            <div>Receiving person last name: {detail.receivingPersonLastname || "-"}</div>
+            <div>Receiving person email: {detail.receivingPersonEmail || "-"}</div>
+            <div>Receiving person phone: {detail.receivingPersonPhone || "-"}</div>
             <div>Target receiving by: {new Date(detail.targetReceivingBy).toLocaleDateString()}</div>
+            {detail.extraFields ? (
+              <div>Extra fields: {JSON.stringify(detail.extraFields)}</div>
+            ) : null}
           </div>
+          {isManager && isSubmitted && managerAction === "" ? (
+            <div className="requestor-detail-actions">
+              <button type="button" className="requestor-small-btn manager-decision-btn" onClick={() => setManagerAction("approve")}>Approve</button>
+              <button type="button" className="requestor-small-btn manager-decision-btn" onClick={() => setManagerAction("reject")}>Reject</button>
+            </div>
+          ) : null}
 
-          <div className="card grid">
-            <strong>Assignments</strong>
-            {(detail.assignments || []).length === 0 ? <div>No staff assigned yet</div> : null}
-            {(detail.assignments || []).map((a) => (
-              <div key={a.id}>
-                {a.user?.displayName || a.user?.email} ({a.assignedRole})
+          {isRequestor ? (
+            <>
+              {!canRequestorEditDelete ? (
+                <small>Requestor can edit/delete only when status is submitted.</small>
+              ) : (
+                <div className="requestor-detail-actions">
+                  {!isEditingRequest ? (
+                    <>
+                      <button type="button" className="requestor-small-btn" onClick={() => setIsEditingRequest(true)}>Edit Request</button>
+                      <button type="button" className="requestor-small-btn" onClick={onDeleteRequestByRequestor}>Delete Request</button>
+                    </>
+                  ) : null}
+                </div>
+              )}
+              {canRequestorEditDelete && isEditingRequest ? (
+                <form className="card grid" onSubmit={onSaveRequestEdit}>
+                  <label>
+                    Product
+                    <select
+                      value={requestEditForm.productNodeId}
+                      onChange={(e) => setRequestEditForm({ ...requestEditForm, productNodeId: e.target.value })}
+                    >
+                      <option value="">Select product</option>
+                      {requestProducts.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Purpose
+                    <input value={requestEditForm.purpose} onChange={(e) => setRequestEditForm({ ...requestEditForm, purpose: e.target.value })} />
+                  </label>
+                  <label>
+                    Volume (kg)
+                    <input type="number" step="0.001" value={requestEditForm.volumeKg} onChange={(e) => setRequestEditForm({ ...requestEditForm, volumeKg: e.target.value })} />
+                  </label>
+                  <label>
+                    Unit
+                    <input type="number" value={requestEditForm.unitCount} onChange={(e) => setRequestEditForm({ ...requestEditForm, unitCount: e.target.value })} />
+                  </label>
+                  <label>
+                    Receiving address
+                    <input value={requestEditForm.receivingAddress} onChange={(e) => setRequestEditForm({ ...requestEditForm, receivingAddress: e.target.value })} />
+                  </label>
+                  <label>
+                    Receiving person first name
+                    <input value={requestEditForm.receivingPersonFirstname} onChange={(e) => setRequestEditForm({ ...requestEditForm, receivingPersonFirstname: e.target.value })} />
+                  </label>
+                  <label>
+                    Receiving person last name
+                    <input value={requestEditForm.receivingPersonLastname} onChange={(e) => setRequestEditForm({ ...requestEditForm, receivingPersonLastname: e.target.value })} />
+                  </label>
+                  <label>
+                    Receiving person email
+                    <input type="email" value={requestEditForm.receivingPersonEmail} onChange={(e) => setRequestEditForm({ ...requestEditForm, receivingPersonEmail: e.target.value })} />
+                  </label>
+                  <label>
+                    Receiving person phone
+                    <input value={requestEditForm.receivingPersonPhone} onChange={(e) => setRequestEditForm({ ...requestEditForm, receivingPersonPhone: e.target.value })} />
+                  </label>
+                  <label>
+                    Target receiving by
+                    <input type="date" value={requestEditForm.targetReceivingBy} onChange={(e) => setRequestEditForm({ ...requestEditForm, targetReceivingBy: e.target.value })} />
+                  </label>
+                  <button type="submit">Save Request</button>
+                  <button type="button" onClick={() => setIsEditingRequest(false)}>Cancel</button>
+                </form>
+              ) : null}
+            </>
+          ) : null}
+
+          {showWorkflowSections ? (
+            <>
+              <div className="card grid">
+                <strong>Assignments</strong>
+                {(detail.assignments || []).length === 0 ? <div>No staff assigned yet</div> : null}
+                {(detail.assignments || []).map((a) => (
+                  <div key={a.id}>
+                    {a.user?.displayName || a.user?.email} ({a.assignedRole})
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          <div className="card grid">
-            <strong>Tasks</strong>
-            {(detail.tasks || []).map((t) => (
-              <div key={t.id}>{t.taskRole}: {t.state}</div>
-            ))}
-          </div>
-
-          <div className="card grid">
-            <strong>Timeline</strong>
-            {(detail.comments || []).length === 0 ? <div>No comments yet</div> : null}
-            {(detail.comments || []).map((c) => (
-              <div key={c.id}>
-                [{new Date(c.createdAt).toLocaleString()}] {c.commentType} by {c.author?.displayName || c.author?.email}: {c.body}
+              <div className="card grid">
+                <strong>Tasks</strong>
+                {(detail.tasks || []).map((t) => (
+                  <div key={t.id}>{t.taskRole}: {t.state}</div>
+                ))}
               </div>
-            ))}
-          </div>
+
+              <div className="card grid">
+                <strong>Timeline</strong>
+                {(detail.comments || []).length === 0 ? <div>No comments yet</div> : null}
+                {(detail.comments || []).map((c) => (
+                  <div key={c.id}>
+                    [{new Date(c.createdAt).toLocaleString()}] {c.commentType} by {c.author?.displayName || c.author?.email}: {c.body}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
 
           {isManager ? (
             <>
-              {shouldShowCountSection ? (
-                <div className="card grid">
-                  <h3>Approve + Assign By Role Count</h3>
-                  {STAFF_ROLES.map((role) => (
-                    <label key={role}>
-                      {role} count (available: {groupedStaff[role].length})
-                      <input
-                        type="number"
-                        min="0"
-                        max={groupedStaff[role].length}
-                        value={counts[role]}
-                        onChange={(e) => setRoleCount(role, e.target.value)}
-                      />
-                    </label>
-                  ))}
-                  <button type="button" onClick={applyCountsToSelection}>Apply Counts To Selection</button>
-                </div>
-              ) : null}
-
-              <div className="card grid">
-                <h3>Approve + Assign</h3>
-                <div>Selected total: {selectedAssigneeIds.length}</div>
-                <div>
-                  Selected users:
-                  {selectedAssigneeIds.length === 0 ? " none" : ""}
-                  {STAFF_ROLES.map((role) => selectedByRole[role].map((u) => (
-                    <div key={u.id}>{u.displayName || u.email} ({role})</div>
-                  )))}
-                </div>
-                <div>
-                  <strong>Manual Override Picker</strong>
-                  {STAFF_ROLES.map((role) => (
-                    <div key={role}>
-                      <strong>{role}{shouldShowCountSection ? ` (target ${counts[role]}, selected ${selectedByRole[role].length})` : ` (selected ${selectedByRole[role].length})`}</strong>
-                      {groupedStaff[role].map((u) => (
-                        <label key={u.id}>
-                          <input
-                            type="checkbox"
-                            checked={selectedAssigneeSet.has(u.id)}
-                            onChange={() => toggleManualAssignee(u.id)}
-                          />
-                          {u.displayName || u.email} ({u.email})
-                        </label>
-                      ))}
+              {isSubmitted ? (
+                <>
+                  {managerAction === "approve" ? (
+                    <div className="card grid">
+                      <h3>Assign Staff</h3>
+                      <div>
+                        Selected users:
+                        {selectedAssigneeIds.length === 0 ? " none" : ""}
+                        {STAFF_ROLES.map((role) => selectedByRole[role].map((u) => (
+                          <div key={u.id}>{u.displayName || u.email} ({role})</div>
+                        )))}
+                      </div>
+                      <div>
+                        <strong>Manual Override Picker</strong>
+                        {STAFF_ROLES.map((role) => (
+                          <div key={role}>
+                            <strong>{role}</strong>
+                            {groupedStaff[role].map((u) => (
+                              <label key={u.id}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedAssigneeSet.has(u.id)}
+                                  onChange={() => toggleManualAssignee(u.id)}
+                                />
+                                {u.displayName || u.email} ({u.email})
+                              </label>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                      <label>
+                        Approve comment
+                        <input value={approveComment} onChange={(e) => setApproveComment(e.target.value)} />
+                      </label>
+                      <div className="manager-assign-actions">
+                        <button type="button" className="manager-assign-btn" onClick={onApprove}>Approve</button>
+                        <button type="button" className="manager-assign-btn" onClick={() => setManagerAction("")}>Back</button>
+                      </div>
                     </div>
-                  ))}
-                </div>
-                <label>
-                  Approve comment
-                  <input value={approveComment} onChange={(e) => setApproveComment(e.target.value)} />
-                </label>
-                <button type="button" onClick={onApprove}>Approve + Assign</button>
-              </div>
+                  ) : null}
 
-              <div className="card grid">
-                <h3>Reject</h3>
-                <label>
-                  Reject comment (required)
-                  <input value={rejectComment} onChange={(e) => setRejectComment(e.target.value)} />
-                </label>
-                <button type="button" onClick={onReject}>Reject</button>
-              </div>
-
-              <div className="card grid">
-                <h3>Reset Status</h3>
-                <label>
-                  To status
-                  <select value={resetStatus} onChange={(e) => setResetStatus(e.target.value)}>
-                    {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </label>
-                <label>
-                  Reason
-                  <input value={resetReason} onChange={(e) => setResetReason(e.target.value)} />
-                </label>
-                <button type="button" onClick={onReset}>Reset</button>
-              </div>
-              <div className="card grid">
-                <h3>Delete Request</h3>
-                <small>Permanent delete. This cannot be undone.</small>
-                <button type="button" onClick={onDeleteRequest}>Delete Request</button>
-              </div>
+                  {managerAction === "reject" ? (
+                    <div className="card grid">
+                      <h3>Reject</h3>
+                      <label>
+                        Reject comment (required)
+                        <input value={rejectComment} onChange={(e) => setRejectComment(e.target.value)} />
+                      </label>
+                      <button type="button" onClick={onReject}>Reject</button>
+                      <button type="button" onClick={() => setManagerAction("")}>Back</button>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <div className="requestor-detail-actions">
+                    <button
+                      type="button"
+                      className="requestor-small-btn"
+                      onClick={() => setShowManagerResetForm((prev) => !prev)}
+                    >
+                      Reset Request
+                    </button>
+                    <button type="button" className="requestor-small-btn" onClick={onDeleteRequest}>Delete Request</button>
+                  </div>
+                  {showManagerResetForm ? (
+                    <div className="card grid">
+                      <label>
+                        To status
+                        <select value={resetStatus} onChange={(e) => setResetStatus(e.target.value)}>
+                          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </label>
+                      <label>
+                        Reason
+                        <input value={resetReason} onChange={(e) => setResetReason(e.target.value)} />
+                      </label>
+                      <button type="button" onClick={onReset}>Apply Reset</button>
+                    </div>
+                  ) : null}
+                </>
+              )}
             </>
           ) : null}
         </>

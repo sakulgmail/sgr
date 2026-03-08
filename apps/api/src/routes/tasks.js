@@ -36,7 +36,39 @@ tasksRouter.get("/my", async (req, res) => {
     take
   });
 
-  return res.json({ items, pagination: paginationMeta(total, page, pageSize) });
+  const workRequestIds = Array.from(new Set(items.map((t) => t.workRequestId)));
+  const handoffs = workRequestIds.length === 0 ? [] : await prisma.taskHandoff.findMany({
+    where: {
+      toUserId: req.session.user.id,
+      workRequestId: { in: workRequestIds }
+    },
+    include: {
+      fromUser: {
+        select: {
+          displayName: true,
+          email: true
+        }
+      }
+    },
+    orderBy: { createdAt: "desc" }
+  });
+  const handoffsByRequestId = new Map();
+  for (const handoff of handoffs) {
+    const list = handoffsByRequestId.get(handoff.workRequestId) || [];
+    list.push({
+      id: handoff.id,
+      note: handoff.note || "",
+      createdAt: handoff.createdAt,
+      fromUser: handoff.fromUser
+    });
+    handoffsByRequestId.set(handoff.workRequestId, list);
+  }
+  const enrichedItems = items.map((task) => ({
+    ...task,
+    handoffNotes: handoffsByRequestId.get(task.workRequestId) || []
+  }));
+
+  return res.json({ items: enrichedItems, pagination: paginationMeta(total, page, pageSize) });
 });
 
 tasksRouter.post("/:id/acknowledge", async (req, res) => {
