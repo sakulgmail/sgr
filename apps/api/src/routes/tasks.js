@@ -125,6 +125,8 @@ tasksRouter.post("/:id/finish", async (req, res) => {
   const task = await prisma.task.findUnique({ where: { id: req.params.id } });
   if (!task) return res.status(404).json({ error: "Task not found" });
   if (task.assigneeUserId !== req.session.user.id) return res.status(403).json({ error: "Forbidden" });
+  if (task.state === "active") return res.status(400).json({ error: "Task must be acknowledged before finishing" });
+  if (task.state === "finished") return res.status(400).json({ error: "Task already finished" });
 
   const assignments = await prisma.workRequestAssignment.findMany({ where: { workRequestId: task.workRequestId } });
   const assignedIds = new Set(assignments.map((a) => a.userId));

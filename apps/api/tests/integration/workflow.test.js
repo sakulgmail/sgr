@@ -177,4 +177,84 @@ describe("workflow integration", () => {
     expect(shipRes.status).toBe(200);
     expect(shipRes.body.status).toBe("shipped");
   });
+
+  it("rejects finishing a task before acknowledgement", async () => {
+    const password = "TestPass123!";
+    const hash = await bcrypt.hash(password, 12);
+
+    const requestor = await prisma.user.create({
+      data: { email: `${uid("requestor")}@test.local`, displayName: "Req", role: "REQUESTOR", passwordHash: hash, isActive: true }
+    });
+    const manager = await prisma.user.create({
+      data: { email: `${uid("manager")}@test.local`, displayName: "Mgr", role: "SALES_MANAGER", passwordHash: hash, isActive: true }
+    });
+    const production = await prisma.user.create({
+      data: {
+        email: `${uid("prod")}@test.local`,
+        displayName: "Prod",
+        role: "STAFF",
+        staffType: "PRODUCTION_ENGINEER",
+        passwordHash: hash,
+        isActive: true
+      }
+    });
+    created.userIds.push(requestor.id, manager.id, production.id);
+
+    const category = await prisma.productNode.create({
+      data: { name: uid("cat"), nodeType: "CATEGORY", sortOrder: 1, isActive: true }
+    });
+    const product = await prisma.productNode.create({
+      data: { name: uid("product"), nodeType: "PRODUCT", parentId: category.id, sortOrder: 1, isActive: true }
+    });
+    created.nodeIds.push(category.id, product.id);
+
+    const requestorAgent = request.agent(app);
+    const managerAgent = request.agent(app);
+    const productionAgent = request.agent(app);
+
+    const reqCsrf = await loginAs(requestorAgent, requestor.email, password);
+    const managerCsrf = await loginAs(managerAgent, manager.email, password);
+    const prodCsrf = await loginAs(productionAgent, production.email, password);
+
+    const createRes = await requestorAgent
+      .post("/api/work-requests")
+      .set("x-csrf-token", reqCsrf)
+      .send({
+        productNodeId: product.id,
+        purpose: "Finish without ack test",
+        volumeKg: 1.5,
+        unitCount: 2,
+        receivingAddress: "Test street",
+        receivingPersonFirstname: "A",
+        receivingPersonLastname: "B",
+        receivingPersonEmail: "ab@test.local",
+        receivingPersonPhone: "123",
+        targetReceivingBy: "2026-03-01"
+      });
+    expect(createRes.status).toBe(201);
+    const wrId = createRes.body.id;
+    created.workRequestIds.push(wrId);
+
+    const approveRes = await managerAgent
+      .post(`/api/manager/work-requests/${wrId}/approve`)
+      .set("x-csrf-token", managerCsrf)
+      .send({
+        assignees: [production.id],
+        comment: "approved"
+      });
+    expect(approveRes.status).toBe(200);
+
+    const prodTasksRes = await productionAgent.get("/api/tasks/my");
+    expect(prodTasksRes.status).toBe(200);
+    const prodTask = prodTasksRes.body.items.find((t) => t.workRequestId === wrId);
+    expect(prodTask).toBeTruthy();
+    expect(prodTask.state).toBe("active");
+
+    const finishRes = await productionAgent
+      .post(`/api/tasks/${prodTask.id}/finish`)
+      .set("x-csrf-token", prodCsrf)
+      .send({ comment: "finish prod" });
+    expect(finishRes.status).toBe(400);
+    expect(finishRes.body.error).toBe("Task must be acknowledged before finishing");
+  });
 });

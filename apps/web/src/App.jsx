@@ -380,12 +380,10 @@ function StaffPage() {
   const [handoffByTaskId, setHandoffByTaskId] = useState({});
   const [msg, setMsg] = useState("");
   const [stateFilter, setStateFilter] = useState("");
-  const [requestStatusFilter, setRequestStatusFilter] = useState("");
 
   async function loadTasks() {
     const q = new URLSearchParams();
     if (stateFilter) q.set("state", stateFilter);
-    if (requestStatusFilter) q.set("requestStatus", requestStatusFilter);
     const d = await api(`/api/tasks/my${q.toString() ? `?${q.toString()}` : ""}`);
     const list = d.items || [];
     setItems(list);
@@ -401,7 +399,7 @@ function StaffPage() {
 
   useEffect(() => {
     loadTasks().catch((e) => setMsg(e.message));
-  }, [stateFilter, requestStatusFilter]);
+  }, [stateFilter]);
 
   function toggleHandoff(taskId, userId) {
     setHandoffByTaskId((prev) => {
@@ -468,13 +466,6 @@ function StaffPage() {
             <option value="finished">finished</option>
           </select>
         </label>
-        <label>
-          Request status
-          <select value={requestStatusFilter} onChange={(e) => setRequestStatusFilter(e.target.value)}>
-            <option value="">All</option>
-            {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </label>
       </div>
       <div className="card">{msg || `My tasks: ${items.length}`}</div>
       {items.map((task) => {
@@ -488,45 +479,53 @@ function StaffPage() {
             <div>Task state: {task.state}</div>
             <Link to={`/work-requests/${task.workRequestId}`}>Open details</Link>
 
-            <label>
-              Acknowledge comment
-              <input
-                value={ackCommentByTaskId[task.id] || ""}
-                onChange={(e) => setAckCommentByTaskId((prev) => ({ ...prev, [task.id]: e.target.value }))}
-              />
-            </label>
-            <button type="button" onClick={() => onAcknowledge(task.id)}>Acknowledge</button>
-
-            <label>
-              Finish comment
-              <input
-                value={finishCommentByTaskId[task.id] || ""}
-                onChange={(e) => setFinishCommentByTaskId((prev) => ({ ...prev, [task.id]: e.target.value }))}
-              />
-            </label>
-            <label>
-              Handoff note
-              <input
-                value={handoffCommentByTaskId[task.id] || ""}
-                onChange={(e) => setHandoffCommentByTaskId((prev) => ({ ...prev, [task.id]: e.target.value }))}
-              />
-            </label>
-            {candidates.length > 0 ? (
-              <div>
-                <strong>Handoff to assigned staff</strong>
-                {candidates.map((a) => (
-                  <label key={a.userId}>
-                    <input
-                      type="checkbox"
-                      checked={(handoffByTaskId[task.id] || []).includes(a.userId)}
-                      onChange={() => toggleHandoff(task.id, a.userId)}
-                    />
-                    {a.user?.displayName || a.user?.email} ({a.assignedRole})
-                  </label>
-                ))}
-              </div>
+            {task.state === "active" ? (
+              <>
+                <label>
+                  Acknowledge comment
+                  <input
+                    value={ackCommentByTaskId[task.id] || ""}
+                    onChange={(e) => setAckCommentByTaskId((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                  />
+                </label>
+                <button type="button" onClick={() => onAcknowledge(task.id)}>Acknowledge</button>
+              </>
             ) : null}
-            <button type="button" onClick={() => onFinish(task.id)}>Finish Task</button>
+
+            {task.state === "acknowledged" ? (
+              <>
+                <label>
+                  Finish comment
+                  <input
+                    value={finishCommentByTaskId[task.id] || ""}
+                    onChange={(e) => setFinishCommentByTaskId((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  Handoff note
+                  <input
+                    value={handoffCommentByTaskId[task.id] || ""}
+                    onChange={(e) => setHandoffCommentByTaskId((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                  />
+                </label>
+                {candidates.length > 0 ? (
+                  <div>
+                    <strong>Handoff to assigned staff</strong>
+                    {candidates.map((a) => (
+                      <label key={a.userId}>
+                        <input
+                          type="checkbox"
+                          checked={(handoffByTaskId[task.id] || []).includes(a.userId)}
+                          onChange={() => toggleHandoff(task.id, a.userId)}
+                        />
+                        {a.user?.displayName || a.user?.email} ({a.assignedRole})
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
+                <button type="button" onClick={() => onFinish(task.id)}>Finish Task</button>
+              </>
+            ) : null}
           </div>
         );
       })}
@@ -550,7 +549,12 @@ function LogisticsPage() {
     if (stateFilter) q.set("state", stateFilter);
     if (requestStatusFilter) q.set("requestStatus", requestStatusFilter);
     const d = await api(`/api/tasks/my${q.toString() ? `?${q.toString()}` : ""}`);
-    setItems(d.items || []);
+    const sortedItems = [...(d.items || [])].sort((a, b) => {
+      const aPriority = a.workRequest?.status === "shipped" ? 0 : 1;
+      const bPriority = b.workRequest?.status === "shipped" ? 0 : 1;
+      return aPriority - bPriority;
+    });
+    setItems(sortedItems);
   }
 
   useEffect(() => {
@@ -609,23 +613,30 @@ function LogisticsPage() {
       </div>
       <div className="card">{msg || `My tasks: ${items.length}`}</div>
       {items.map((task) => (
-        <div className="card grid" key={task.id}>
-          <strong>{task.workRequest?.workRequestNo || task.workRequestId}</strong>
-          <div>Request status: {task.workRequest?.status}</div>
-          <div>Task role: {task.taskRole}</div>
-          <div>Task state: {task.state}</div>
-          {(task.handoffNotes || []).length > 0 ? (
-            <div>
-              <strong>Handoff notes:</strong>
-              {task.handoffNotes.map((h) => (
-                <div key={h.id}>
-                  {h.note || "-"} ({h.fromUser?.displayName || h.fromUser?.email || "Unknown"} at {new Date(h.createdAt).toLocaleString()})
-                </div>
-              ))}
-            </div>
-          ) : null}
-          <Link to={`/work-requests/${task.workRequestId}`}>Open details</Link>
-        </div>
+        task.workRequest?.status === "shipped" ? (
+          <div className="card" key={task.id}>
+            <strong>{task.workRequest?.workRequestNo || task.workRequestId}</strong> Shipped{" "}
+            <Link to={`/work-requests/${task.workRequestId}`}>Open details</Link>
+          </div>
+        ) : (
+          <div className="card grid" key={task.id}>
+            <strong>{task.workRequest?.workRequestNo || task.workRequestId}</strong>
+            <div>Request status: {task.workRequest?.status}</div>
+            <div>Task role: {task.taskRole}</div>
+            <div>Task state: {task.state}</div>
+            {(task.handoffNotes || []).length > 0 ? (
+              <div>
+                <strong>Handoff notes:</strong>
+                {task.handoffNotes.map((h) => (
+                  <div key={h.id}>
+                    {h.note || "-"} ({h.fromUser?.displayName || h.fromUser?.email || "Unknown"} at {new Date(h.createdAt).toLocaleString()})
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <Link to={`/work-requests/${task.workRequestId}`}>Open details</Link>
+          </div>
+        )
       ))}
       <form className="card grid" onSubmit={onShip}>
         <label>Work Request ID / No<input value={requestId} onChange={(e) => setRequestId(e.target.value)} /></label>
@@ -768,7 +779,7 @@ function CreateRequestPage() {
         <label>Last name<input value={form.receivingPersonLastname} onChange={(e) => setForm({ ...form, receivingPersonLastname: e.target.value })} /></label>
         <label>Email<input type="email" value={form.receivingPersonEmail} onChange={(e) => setForm({ ...form, receivingPersonEmail: e.target.value })} /></label>
         <label>Phone<input value={form.receivingPersonPhone} onChange={(e) => setForm({ ...form, receivingPersonPhone: e.target.value })} /></label>
-        <label>Date<input type="date" value={form.targetReceivingBy} onChange={(e) => setForm({ ...form, targetReceivingBy: e.target.value })} /></label>
+        <label>Target Receving Date<input type="date" value={form.targetReceivingBy} onChange={(e) => setForm({ ...form, targetReceivingBy: e.target.value })} /></label>
         <button type="submit">Submit</button>
         {status ? <small>{status}</small> : null}
       </form>
